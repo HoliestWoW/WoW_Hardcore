@@ -26,11 +26,13 @@ shadow_embrace_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		local combat_log_payload = { CombatLogGetCurrentEventInfo() }
-		-- 2: subevent index, 5: source_name, 14: spell school
+		
+		-- FIX: Ensure payload arrays 2 and 5 exist before parsing
+		if not combat_log_payload or not combat_log_payload[2] then return end
+		
 		if not (combat_log_payload[5] == nil) then
 			if combat_log_payload[5] == UnitName("player") then
 				if string.find(combat_log_payload[2], "SPELL_DAMAGE") ~= nil then
-					-- 2 holy, 4 fire, 8 nature, 16 frost, 32 shadow, 64 arcane
 					if combat_log_payload[14] ~= 32 then
 						shadow_embrace_achievement.fail_function_executor.Fail(shadow_embrace_achievement.name)
 					end

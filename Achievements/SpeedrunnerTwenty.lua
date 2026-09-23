@@ -30,8 +30,8 @@ function _achievement:Register(succeed_function_executor)
 end
 
 function _achievement:Unregister()
-	_achievement:UnRegisterEvent("PLAYER_LEVEL_UP")
-	_achievement:UnRegisterEvent("TIME_PLAYED_MSG")
+	_achievement:UnregisterEvent("PLAYER_LEVEL_UP")
+	_achievement:UnregisterEvent("TIME_PLAYED_MSG")
 end
 
 local recently_leveled = false

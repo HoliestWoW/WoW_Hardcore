@@ -69,7 +69,9 @@ function party_change_token_handler:SendRequestPartyChangeToken(
 		party_change_token_handler.generated_secret = GeneratePartyChangeTokenSecret()
 		local commMessage = _comm_command_header .. _comm_command_delim .. party_change_token_handler.generated_secret
 		for _, partner in ipairs(_team) do
-			_CTL:SendAddonMessage("ALERT", _comm_name, commMessage, "WHISPER", partner)
+			local target = partner
+			if string.find(target, " ") then target = '"' .. target .. '"' end
+			_CTL:SendAddonMessage("ALERT", _comm_name, commMessage, "WHISPER", target)
 		end
 	end
 end
@@ -109,7 +111,9 @@ function party_change_token_handler:SendApplyPartyChangeToken(
 	if _CTL then
 		local commMessage = _comm_command_header .. _comm_command_delim .. _secret
 		for _, partner in ipairs(_team) do
-			_CTL:SendAddonMessage("ALERT", _comm_name, commMessage, "WHISPER", partner)
+			local target = partner
+			if string.find(target, " ") then target = '"' .. target .. '"' end
+			_CTL:SendAddonMessage("ALERT", _comm_name, commMessage, "WHISPER", target)
 		end
 	end
 end

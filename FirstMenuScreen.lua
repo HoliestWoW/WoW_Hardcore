@@ -191,15 +191,20 @@ function ShowFirstMenu(_hardcore_character, _hardcore_settings, _failure_functio
 		end)
 	end
 
+	-- Check for WoW Forever / Camelot client build range (16001 - 16999)
+	local _, buildStr = GetBuildInfo()
+	local buildNum = tonumber(buildStr) or 0
+	local isTargetCamelot = (buildNum >= 16001 and buildNum <= 16999) or _G.HC_IS_CAMELOT or (_G["HardcoreBuildLabel"] == "Cata")
+
 	tabcontainer = AceGUI:Create("TabGroup") -- "InlineGroup" is also good
 	tabcontainer:SetTabs({
 		{ value = "WelcomeTab", text = "General" },
 		{ value = "PartyTab", text = "Party" },
 		{ value = "AchievementsTab", text = "Achievements" },
-	}) -- ,
+	})
 	tabcontainer:SetFullWidth(true)
-	tabcontainer:SetFullHeight(true) -- probably?
-	tabcontainer:SetLayout("Flow") -- important!
+	tabcontainer:SetFullHeight(true)
+	tabcontainer:SetLayout("Flow")
 
 	-- Callback function for OnGroupSelected
 	local function SelectGroup(container, event, group)
@@ -219,6 +224,7 @@ function ShowFirstMenu(_hardcore_character, _hardcore_settings, _failure_functio
 
 			DrawPartyTab(container, scroll_frame)
 		elseif group == "AchievementsTab" then
+			-- RESTORED: Directly draw the Achievement Tab for all clients so you can test
 			achievement_tab_handler:DrawAchievementTab(
 				tabcontainer,
 				_hardcore_character,

@@ -32,7 +32,7 @@ end
 
 function _achievement:Unregister()
 	_achievement:UnregisterEvent("SKILL_LINES_CHANGED")
-	_achievement:UnRegisterEvent("PLAYER_ENTERING_WORLD")
+	_achievement:UnregisterEvent("PLAYER_ENTERING_WORLD")
 end
 
 -- Register Definitions

@@ -20,7 +20,7 @@ along with the Hardcore AddOn. If not, see <http://www.gnu.org/licenses/>.
 --[[ Const variables ]]
 --
 -- ERR_CHAT_PLAYER_NOT_FOUND_S = nil -- Disables warning when pinging non-hc player -- This clashes with other addons
-StaticPopupDialogs["CHAT_CHANNEL_PASSWORD"] = nil
+-- StaticPopupDialogs["CHAT_CHANNEL_PASSWORD"] = nil
 --CHAT_WRONG_PASSWORD_NOTICE = nil
 local DEATH_ALERT_COOLDOWN = 1800
 local GRIEF_WARNING_OFF = 0
@@ -54,8 +54,33 @@ local CLASS_DICT = {
 	["Druid"] = 1,
 }
 
+local hc_debug = CreateFrame("Frame")
+hc_debug:RegisterEvent("ADDON_ACTION_BLOCKED")
+hc_debug:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+hc_debug:SetScript("OnEvent", function(self, event, addonName, functionName)
+    print("\124cFFFF0000[HC Taint Debug]\124r " .. event .. " -> Addon: " .. tostring(addonName) .. " tried to call: " .. tostring(functionName))
+    
+    -- This will print the exact file name and line number to your chat frame:
+    print(debugstack(1, 4, 0))
+end)
+
+-- Cross-Client Compatibility Wrappers
+local GetItemInfoSafe = (C_Item and C_Item.GetItemInfo) or _G.GetItemInfo
+local GetItemSpellSafe = (C_Item and C_Item.GetItemSpell) or _G.GetItemSpell
+
+local function GetBuffNameSafe(unit, index)
+	if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
+		local auraData = C_UnitAuras.GetBuffDataByIndex(unit, index)
+		return auraData and auraData.name or nil
+	elseif _G.UnitBuff then
+		local name = _G.UnitBuff(unit, index)
+		return name
+	end
+	return nil
+end
+
 --[[ Global saved variables ]]
-Hardcore_Settings = {
+Hardcore_Settings = Hardcore_Settings or {
 	level_list = {},
 	notify = true,
 	debug_log = {},
@@ -74,10 +99,10 @@ Hardcore_Settings = {
 	reload_reminder_interval = 0,
 }
 
-WARNING = ""
+WARNING = WARNING or ""
 
 --[[ Character saved variables ]]
-Hardcore_Character = {
+Hardcore_Character = Hardcore_Character or {
 	guid = "",
 	time_tracked = 0, -- seconds
 	time_played = 0, -- seconds
@@ -103,7 +128,7 @@ Hardcore_Character = {
 	custom_pronoun = false,
 }
 
-Backup_Character_Data = {}
+Backup_Character_Data = Backup_Character_Data or {}
 
 --[[ Local variables ]]
 _G.hc_online_player_ranks = {}
@@ -319,7 +344,7 @@ local displaylist = Hardcore_Settings.level_list
 local icon = nil
 
 local locale = GetLocale()
-hardcore_locale_supported_font = nil
+hardcore_locale_supported_font = "Fonts\\FRIZQT__.TTF"
 local non_english_locales = {
 	koKR = 1,
 	zhCN = 1,
@@ -417,10 +442,41 @@ local ALERT_STYLES = {
 }
 Hardcore_Alert_Frame:SetScale(0.7)
 
--- the big frame object for our addon
-local Hardcore = CreateFrame("Frame", "Hardcore", nil, "BackdropTemplate")
+-- The main table for our addon (Plain Lua table to prevent widget method taint)
+local Hardcore = {}
+_G["Hardcore"] = Hardcore
 Hardcore.ALERT_STYLES = ALERT_STYLES
 Hardcore.STORE_MOUNT_SPELL_NAMES = STORE_MOUNT_SPELL_NAMES
+
+-- Event Proxy to handle game events securely
+local HCEventFrame = CreateFrame("Frame", "Hardcore_EventFrame", UIParent)
+
+local FORBIDDEN_EVENTS = {
+    ["ADDON_ACTION_FORBIDDEN"] = true,
+    ["ADDON_ACTION_BLOCKED"] = true,
+    ["MACRO_ACTION_FORBIDDEN"] = true,
+    ["MACRO_ACTION_BLOCKED"] = true,
+    ["COMBAT_LOG_EVENT_UNFILTERED"] = true,
+	["COMBAT_LOG_EVENT"] = true,
+}
+
+function Hardcore:RegisterEvent(event)
+    -- 1. Pre-emptively block known forbidden events
+    if FORBIDDEN_EVENTS[event] then
+        return 
+    end
+    
+    HCEventFrame:RegisterEvent(event)
+end
+function Hardcore:UnregisterEvent(event)
+	HCEventFrame:UnregisterEvent(event)
+end
+HCEventFrame:SetScript("OnEvent", function(_, event, ...)
+	if Hardcore[event] then
+		Hardcore[event](Hardcore, ...)
+	end
+end)
+-- END NEW CODE
 
 Hardcore_Frame:ApplyBackdrop()
 
@@ -516,7 +572,10 @@ function FailureFunction(achievement_name)
 	end
 end
 
-local failure_function_executor = { Fail = FailureFunction }
+local failure_function_executor = { 
+	Fail = FailureFunction,
+	fail = FailureFunction 
+}
 
 function SuccessFunction(achievement_name)
 	if _G.passive_achievements[achievement_name] == nil then
@@ -542,7 +601,10 @@ function SuccessFunction(achievement_name)
 	)
 end
 
-local success_function_executor = { Succeed = SuccessFunction }
+local success_function_executor = { 
+	Succeed = SuccessFunction,
+	succeed = SuccessFunction
+}
 
 local saved_variable_meta = {
 	{ key = "guid", initial_data = UnitGUID("player") },
@@ -589,15 +651,24 @@ local settings_saved_variable_meta = {
 --
 
 function Hardcore:InitializeSavedVariables()
-	if Hardcore_Character == nil then
-		Hardcore_Character = {}
-	end
+    local playerKey = UnitGUID("player")
+    
+    -- SHADOW RESTORE: Bypass the client's read-failure by loading from the Account-wide backup
+    if (not Hardcore_Character or not Hardcore_Character.guid or Hardcore_Character.guid == "") and playerKey then
+        if Hardcore_Settings and Hardcore_Settings.CharacterBackups and Hardcore_Settings.CharacterBackups[playerKey] then
+            Hardcore_Character = Hardcore_Settings.CharacterBackups[playerKey]
+        end
+    end
 
-	for i, v in ipairs(saved_variable_meta) do
-		if Hardcore_Character[v.key] == nil then
-			Hardcore_Character[v.key] = v.initial_data
-		end
-	end
+    if Hardcore_Character == nil then
+        Hardcore_Character = {}
+    end
+
+    for i, v in ipairs(saved_variable_meta) do
+        if Hardcore_Character[v.key] == nil then
+            Hardcore_Character[v.key] = v.initial_data
+        end
+    end
 end
 
 function Hardcore:ForceResetSavedVariables()
@@ -783,7 +854,7 @@ end
 --[[ Override default WoW UI ]]
 --
 
-TradeFrameTradeButton:SetScript("OnClick", function()
+TradeFrameTradeButton:HookScript("OnClick", function()
 	local duo_trio_partner = false
 	local legacy_duo_support = #Hardcore_Character.trade_partners > 0
 	local target_trader = TradeFrameRecipientNameText:GetText()
@@ -812,13 +883,13 @@ TradeFrameTradeButton:SetScript("OnClick", function()
 	end
 
 	if duo_trio_partner == true then
-		AcceptTrade()
+		-- Blizzard's native code handles AcceptTrade()
 	elseif (level == max_level) or legacy_duo_support then
 		table.insert(Hardcore_Character.trade_partners, target_trader)
 		Hardcore_Character.trade_partners = Hardcore_FilterUnique(Hardcore_Character.trade_partners)
-		AcceptTrade()
+		-- Blizzard's native code handles AcceptTrade()
 	else
-		Hardcore:Print("|cFFFF0000BLOCKED:|r You may not trade outside of duos/trios.")
+		Hardcore:Print("|cFFFF0000WARNING:|r You traded outside of duos/trios. Run invalidated.")
 	end
 end)
 
@@ -826,64 +897,17 @@ end)
 --
 
 function Hardcore:Startup()
-	-- the entry point of our addon
-	-- called inside loading screen before player sees world, some api functions are not available yet.
-	
 	Hardcore.UserRequestedPlayed = false
     
-    -- If the user types /played, we allow the next message through
-    if SlashCmdList then
-        hooksecurefunc(SlashCmdList, "PLAYED", function()
-            Hardcore.UserRequestedPlayed = true
-            -- Reset the flag after 3 seconds in case the server never responds
-            C_Timer.After(3.0, function() 
-                 Hardcore.UserRequestedPlayed = false 
-            end)
-        end)
-    end
+	if SlashCmdList then
+		hooksecurefunc(SlashCmdList, "PLAYED", function()
+			Hardcore.UserRequestedPlayed = true
+			C_Timer.After(3.0, function() 
+				 Hardcore.UserRequestedPlayed = false 
+			end)
+		end)
+	end
 
-    -- Hook ALL Chat Frames (1 through 10) to catch custom tabs
-    for i = 1, 10 do
-        local frameName = "ChatFrame" .. i
-        local frame = _G[frameName]
-        
-        if frame then
-            if not Hardcore.Original_AddMessage_Hooks then
-                Hardcore.Original_AddMessage_Hooks = {}
-            end
-            
-            -- Save the original function if we haven't already
-            if not Hardcore.Original_AddMessage_Hooks[frame] then
-                Hardcore.Original_AddMessage_Hooks[frame] = frame.AddMessage
-            end
-
-            -- Apply the new hook
-            frame.AddMessage = function(self, text, ...)
-                -- Define patterns to check
-                local totalPrefix = string.gsub(TIME_PLAYED_TOTAL or "Total time played", "%%s", "")
-                local levelPrefix = string.gsub(TIME_PLAYED_LEVEL or "Time played this level", "%%s", "")
-                
-                -- Check if the text matches the "Time Played" format
-                if text and (string.find(text, totalPrefix, 1, true) or string.find(text, levelPrefix, 1, true)) then
-                    -- If it matches, ONLY allow it if the user manually asked for it
-                    if not Hardcore.UserRequestedPlayed then
-                        return -- BLOCK IT
-                    end
-                end
-
-                -- Otherwise, pass it through to the original handler
-                if Hardcore.Original_AddMessage_Hooks[self] then
-                    return Hardcore.Original_AddMessage_Hooks[self](self, text, ...)
-                end
-            end
-        end
-    end
-
-	-- event handling helper
-	self:SetScript("OnEvent", function(self, event, ...)
-		self[event](self, ...)
-	end)
-	-- actually start loading the addon once player ui is loading
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
 	self:RegisterEvent("PLAYER_LOGIN")
 	self:RegisterEvent("PLAYER_LOGOUT")
@@ -941,56 +965,15 @@ function Hardcore:PLAYER_LOGIN()
 	--     end
 	-- end)
 
-	-- DISABLE CHARACTER TAB FOR CATA PRE-PATCH
-	if _G["HardcoreBuildLabel"] ~= "Cata" then
-
-	-- Adds HC character tab functionality
-	hooksecurefunc("CharacterFrameTab_OnClick", function(self, button)
-		local name = self:GetName()
-		if name == "CharacterFrameTab6" then
-			if _G["PaperDollFrame"] ~= nil then
-				_G["PaperDollFrame"]:Hide()
-			end
-			if _G["PetPaperDollFrame"] ~= nil then
-				_G["PetPaperDollFrame"]:Hide()
-			end
-			if _G["HonorFrame"] ~= nil then
-				_G["HonorFrame"]:Hide()
-			end
-			if _G["SkillFrame"] ~= nil then
-				_G["SkillFrame"]:Hide()
-			end
-			if _G["ReputationFrame"] ~= nil then
-				_G["ReputationFrame"]:Hide()
-			end
-			if _G["TokenFrame"] ~= nil then
-				_G["TokenFrame"]:Hide()
-			end
-			ShowCharacterHC(Hardcore_Character)
-		elseif
-			(name == "InspectFrameTab3" and _G["HardcoreBuildLabel"] ~= "WotLK")
-			or (name == "InspectFrameTab4" and _G["HardcoreBuildLabel"] == "WotLK")
-		then -- 3: era, 4:wotlk
-			return
-		else
+	-- Hide HC custom frame when standard character subframes appear
+	if type(_G.CharacterFrame_ShowSubFrame) == "function" then
+		hooksecurefunc("CharacterFrame_ShowSubFrame", function(frameName)
 			HideCharacterHC()
-		end
-	end)
-
-	-- What to do when an official frame's tab is clicked (not the HC tab!)
-	hooksecurefunc("CharacterFrame_ShowSubFrame", function(frameName)
-		HideCharacterHC()
-	end)
-
-	else
-
-		-- Cataclysm: need to hook the function in a different way
-
-		-- When any of the official Blizz tabs show, we need to hide
+		end)
+	elseif CharacterFrame and type(CharacterFrame.ShowSubFrame) == "function" then
 		hooksecurefunc(CharacterFrame, "ShowSubFrame", function(self, param1)
 			HideCharacterHC()
 		end)
-
 	end
 
 	-- fires on first loading
@@ -999,7 +982,6 @@ function Hardcore:PLAYER_LOGIN()
 	self:RegisterEvent("PLAYER_DEAD")
 	self:RegisterEvent("PLAYER_TARGET_CHANGED")
 	self:RegisterEvent("CHAT_MSG_ADDON")
-	self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 	self:RegisterEvent("GUILD_ROSTER_UPDATE")
 	self:RegisterEvent("MAIL_SHOW")
 	self:RegisterEvent("AUCTION_HOUSE_SHOW")
@@ -1011,6 +993,7 @@ function Hardcore:PLAYER_LOGIN()
 	self:RegisterEvent("CHAT_MSG_SAY")
 	self:RegisterEvent("CHAT_MSG_GUILD")
 	self:RegisterEvent("PLAYER_MONEY")
+	self:RegisterEvent("UNIT_COMBAT")
 
 	-- Register spell cast events for paladin for checking bubble hearth
 	self:RegisterEvent("UNIT_SPELLCAST_START")
@@ -1021,7 +1004,7 @@ function Hardcore:PLAYER_LOGIN()
 	self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 
 	-- Request info immediately so server sends it
-	for id, _ in pairs(STORE_MOUNT_ITEMS) do GetItemInfo(id) end
+	for id, _ in pairs(STORE_MOUNT_ITEMS) do GetItemInfoSafe(id) end
 
 	-- For inspecting other player's status
 	-- INSPECT READY DISABLED FOR CATA PRE-PATCH
@@ -1034,12 +1017,13 @@ function Hardcore:PLAYER_LOGIN()
 	-- For dungeon tracking targetting of door npcs
 	--self:RegisterEvent("ADDON_ACTION_FORBIDDEN")
 	
-	--[[ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", function(frame, event, message, ...)
+	ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", function(frame, event, message, ...)
         local totalPrefix = string.gsub(TIME_PLAYED_TOTAL or "Total time played", "%%s", "")
         local levelPrefix = string.gsub(TIME_PLAYED_LEVEL or "Time played this level", "%%s", "")
         
         -- If this is a time played message...
-        if (string.find(message, totalPrefix, 1, true) or string.find(message, levelPrefix, 1, true)) then
+		-- Fix: Added hardcoded fallbacks to catch newer client string formatting
+        if (string.find(message, totalPrefix, 1, true) or string.find(message, levelPrefix, 1, true) or string.find(message, "Total time played") or string.find(message, "Time played this level")) then
             -- ...and the user didn't ask for it -> BLOCK IT (return true)
             if not Hardcore.UserRequestedPlayed then
                 return true 
@@ -1047,7 +1031,7 @@ function Hardcore:PLAYER_LOGIN()
         end
         
         return false, message, ...
-    end)]]--
+    end)
 
 	Hardcore:InitializeSavedVariables()
 	Hardcore:InitializeSettingsSavedVariables()
@@ -1056,12 +1040,6 @@ function Hardcore:PLAYER_LOGIN()
 
 	-- different guid means new character with the same name OR Era->TBC Transfer
 	if Hardcore_Character.guid ~= PLAYER_GUID then
-        -- DEBUG START
-        Hardcore:Print("|cff00FFFF[DEBUG] GUID Mismatch Detected!|r")
-        Hardcore:Print("   Stored GUID (Old): " .. tostring(Hardcore_Character.guid))
-        Hardcore:Print("   Player GUID (New): " .. tostring(PLAYER_GUID))
-        Hardcore:Print("   Stored Game Version: " .. tostring(Hardcore_Character.game_version))
-        -- DEBUG END
 		
 		-- 1. Security Hash Check
 		-- Hardcore_VerifyChecksum() runs the check but returns nil. 
@@ -1090,11 +1068,6 @@ function Hardcore:PLAYER_LOGIN()
 			Hardcore.pending_transfer_verification = true
 			
 		else
-            -- DEBUG START
-            Hardcore:Print("|cffFF0000[DEBUG] Migration Logic Failed.|r")
-            if not isFileAuthentic then Hardcore:Print("   Reason: File Tampered/Checksum Failed (Status: " .. tostring(securityStatus) .. ")") end
-            if not isFromEra then Hardcore:Print("   Reason: Not an Era/SoM file (Version: " .. tostring(Hardcore_Character.game_version) .. ")") end
-            -- DEBUG END
 
 			-- Hash failed, or not from Era. Treat as new character.
 			Hardcore:Print("New character detected (or file security failed). Resetting data.")
@@ -1190,15 +1163,16 @@ function Hardcore:PLAYER_LOGIN()
 
 	local function inSOM()
 		for i = 1, 40 do
-			local buff_name, _, _, _, _, _, _, _, _, _, _ = UnitBuff("player", i)
-			if buff_name == nil then
-				return false
+			local auraName = GetBuffNameSafe("player", i)
+			if not auraName then
+				return false -- (or return/break depending on the function)
 			end
-			if buff_name == "Adventure Awaits" or buff_name == "Soul of Iron" then
+			-- Fix: Changed auraData.name to auraName
+			if auraName == "Adventure Awaits" or auraName == "Soul of Iron" then
 				return true
 			end
 		end
-		return true
+		return false
 	end
 
 	CheckForExpiredDKToken(Hardcore_Settings)
@@ -1240,7 +1214,7 @@ end
 
 function Hardcore:GET_ITEM_INFO_RECEIVED(itemID)
     if STORE_MOUNT_ITEMS[itemID] then
-        local spellName = GetItemSpell(itemID)
+        local spellName = GetItemSpellSafe(itemID)
         if spellName then STORE_MOUNT_SPELL_NAMES[spellName] = true end
     end
 end
@@ -1254,15 +1228,22 @@ function Hardcore:CHAT_MSG_LOOT(message)
 end
 
 function Hardcore:PLAYER_LOGOUT()
-	-- Stop further updates to the played time and tracked time, don't want them
-	-- changing after the checksum is stored
-	player_logged_out = true
+    -- Stop further updates to the played time and tracked time, don't want them
+    -- changing after the checksum is stored
+    player_logged_out = true
 
-	-- Calculate the data file checksum
-	Hardcore_StoreChecksum()
+    -- Calculate the data file checksum
+    Hardcore_StoreChecksum()
 
-	-- Improved time resolutions for segments
-	Hardcore_ReadjustTimeResolutions()
+    -- Improved time resolutions for segments
+    Hardcore_ReadjustTimeResolutions()
+
+    -- SHADOW BACKUP: Mirror data to account settings before WoW serializes the files
+    local playerKey = UnitGUID("player")
+    if playerKey then
+        Hardcore_Settings.CharacterBackups = Hardcore_Settings.CharacterBackups or {}
+        Hardcore_Settings.CharacterBackups[playerKey] = Hardcore_Character
+    end
 end
 
 local function GiveVidereWarning()
@@ -1295,12 +1276,18 @@ end
 local function RequestHCDataIfValid(unit_id)
 	if UnitIsPlayer(unit_id) then
 		if UnitIsFriend("player", unit_id) then
-			if
-				other_hardcore_character_cache[UnitName(unit_id)] == nil
-				or time() - other_hardcore_character_cache[UnitName(unit_id)].last_received > 30
-			then
+			local name, realm = UnitName(unit_id)
+			local fullName = name
+			if realm and realm ~= "" then
+				fullName = name .. "-" .. realm
+			end
+
+			-- Stop the addon from continuously trying to whisper your own character
+			if name == UnitName("player") then return end
+
+			if other_hardcore_character_cache[fullName] == nil or time() - other_hardcore_character_cache[fullName].last_received > 30 then
 				if UnitAffectingCombat("player") == false and UnitAffectingCombat(unit_id) == false then
-					Hardcore:RequestCharacterData(UnitName(unit_id))
+					Hardcore:RequestCharacterData(fullName)
 				end
 			end
 		end
@@ -1325,14 +1312,14 @@ function Hardcore:UNIT_SPELLCAST_START(...)
 	local unit, _, spell_id, _, _ = ...
 	if unit == "player" and spell_id == bubble_hearth_vars.spell_id then
 		for i = 1, 40 do
-			name, _, _, _, _, _, _, _, _, _, _ = UnitBuff("player", i)
-			if name == nil then
+			local auraData = C_UnitAuras.GetBuffDataByIndex("player", i)
+			if not auraData then
 				STARTED_BUBBLE_HEARTH_INFO = nil
 				return
-			elseif name == bubble_hearth_vars.bubble_name or name == bubble_hearth_vars.light_of_elune_name then
+			elseif auraData.name == bubble_hearth_vars.bubble_name or auraData.name == bubble_hearth_vars.light_of_elune_name then
 				STARTED_BUBBLE_HEARTH_INFO = {}
 				STARTED_BUBBLE_HEARTH_INFO.start_cast = date("%m/%d/%y %H:%M:%S")
-				STARTED_BUBBLE_HEARTH_INFO.aura_type = name
+				STARTED_BUBBLE_HEARTH_INFO.aura_type = auraData.name
 				Hardcore:Print(
 					"WARNING: Bubble-hearth Detected\nCancel Hearthing Immediately otherwise verification impossible"
 				)
@@ -1347,97 +1334,33 @@ function Hardcore:UNIT_SPELLCAST_START(...)
 end
 
 function Hardcore:INSPECT_READY(...)
-	if InspectFrame == nil then
-		return
-	end
+	if InspectFrame == nil then return end
 	if loaded_inspect_frame == false then
 		loaded_inspect_frame = true
-		local ITabName = "HC"
-		local ITabID = InspectFrame.numTabs + 1
-		local ITab =
-			CreateFrame("Button", "$parentTab" .. ITabID, InspectFrame, "CharacterFrameTabButtonTemplate", ITabName)
-		PanelTemplates_SetNumTabs(InspectFrame, ITabID)
-		PanelTemplates_SetTab(InspectFrame, 1)
-
-		ITab:SetPoint("LEFT", "$parentTab" .. (ITabID - 1), "RIGHT", -16, 0)
-		ITab:SetText(ITabName)
-	end
-
-	if _G["InspectHonorFrame"] ~= nil then
-		hooksecurefunc(_G["InspectHonorFrame"], "Show", function(self)
-			HideInspectHC()
-		end)
-	end
-
-	if _G["InspectPaperDollFrame"] ~= nil then
-		hooksecurefunc(_G["InspectPaperDollFrame"], "Show", function(self)
-			HideInspectHC()
-		end)
-	end
-
-	if _G["InspectPVPFrame"] ~= nil then
-		hooksecurefunc(_G["InspectPVPFrame"], "Show", function(self)
-			HideInspectHC()
-		end)
-	end
-
-	if _G["InspectTalentFrame"] ~= nil then
-		hooksecurefunc(_G["InspectTalentFrame"], "Show", function(self)
-			HideInspectHC()
-		end)
-	end
-
-	hooksecurefunc("CharacterFrameTab_OnClick", function(self)
-		local name = self:GetName()
-		-- Determine if we are on a version with 3 default tabs (TBC, WotLK, Cata) or 2 (Era/SoM)
-		local isExpansion = _G["HardcoreBuildLabel"] == "WotLK" or _G["HardcoreBuildLabel"] == "TBC" or _G["HardcoreBuildLabel"] == "Cata"
 		
-		-- Target Tab is 4 for Expansions, 3 for Era
-		local targetTabName = isExpansion and "InspectFrameTab4" or "InspectFrameTab3"
-		local targetTabID = isExpansion and 4 or 3
+		-- Create a standalone button instead of injecting into the native tab system
+		local ITab = CreateFrame("Button", "HardcoreInspectTab", InspectFrame, "UIPanelButtonTemplate")
+		ITab:SetSize(60, 22)
+		ITab:SetPoint("TOPRIGHT", InspectFrame, "TOPRIGHT", -40, -40)
+		ITab:SetText("HC")
+		
+		ITab:SetScript("OnClick", function()
+			local target_name = UnitName("target")
+			if other_hardcore_character_cache[target_name] ~= nil then
+				ShowInspectHC(other_hardcore_character_cache[target_name], target_name, other_hardcore_character_cache[target_name].version)
+			else
+				local _default_hardcore_character = { achievements = {}, passive_achievements = {}, party_mode = "Solo", team = {}, first_recorded = -1, version = "?" }
+				ShowInspectHC(_default_hardcore_character, target_name, _default_hardcore_character.version)
+			end
+		end)
+	end
 
-		if name ~= targetTabName then
-			return
-		end
+	if _G["InspectHonorFrame"] ~= nil then hooksecurefunc(_G["InspectHonorFrame"], "Show", function(self) HideInspectHC() end) end
+	if _G["InspectPaperDollFrame"] ~= nil then hooksecurefunc(_G["InspectPaperDollFrame"], "Show", function(self) HideInspectHC() end) end
+	if _G["InspectPVPFrame"] ~= nil then hooksecurefunc(_G["InspectPVPFrame"], "Show", function(self) HideInspectHC() end) end
+	if _G["InspectTalentFrame"] ~= nil then hooksecurefunc(_G["InspectTalentFrame"], "Show", function(self) HideInspectHC() end) end
 
-		PanelTemplates_SetTab(InspectFrame, targetTabID)
-
-		if _G["InspectPaperDollFrame"] ~= nil then
-			_G["InspectPaperDollFrame"]:Hide()
-		end
-		if _G["InspectHonorFrame"] ~= nil then
-			_G["InspectHonorFrame"]:Hide()
-		end
-		if _G["InspectPVPFrame"] ~= nil then
-			_G["InspectPVPFrame"]:Hide()
-		end
-		if _G["InspectTalentFrame"] ~= nil then
-			_G["InspectTalentFrame"]:Hide()
-		end
-
-		target_name = UnitName("target")
-		if other_hardcore_character_cache[target_name] ~= nil then
-			ShowInspectHC(
-				other_hardcore_character_cache[target_name],
-				target_name,
-				other_hardcore_character_cache[target_name].version
-			)
-		else
-			local _default_hardcore_character = {
-				achievements = {},
-				passive_achievements = {},
-				party_mode = "Solo",
-				team = {},
-				first_recorded = -1,
-				version = "?",
-			}
-			ShowInspectHC(_default_hardcore_character, target_name, _default_hardcore_character.version)
-		end
-	end)
-
-	hooksecurefunc(InspectFrame, "Hide", function(self, button)
-		HideInspectHC()
-	end)
+	hooksecurefunc(InspectFrame, "Hide", function(self, button) HideInspectHC() end)
 end
 
 function Hardcore:UNIT_SPELLCAST_STOP(...)
@@ -1511,8 +1434,11 @@ function Hardcore:PLAYER_ENTERING_WORLD()
 	Hardcore:Monitor("Monitoring malicious users enabled.")
 
 	if Hardcore_Settings.show_minimap_mailbox_icon == false then
-		MiniMapMailIcon:Hide()
-		MiniMapMailBorder:Hide()
+		if MiniMapMailIcon then MiniMapMailIcon:Hide() end
+		if MiniMapMailBorder then MiniMapMailBorder:Hide() end
+		if MinimapCluster and MinimapCluster.IndicatorFrame and MinimapCluster.IndicatorFrame.MailFrame then
+			MinimapCluster.IndicatorFrame.MailFrame:Hide()
+		end
 	end
 
 	-- initialize addon communication
@@ -1876,13 +1802,6 @@ function Hardcore:TIME_PLAYED_MSG(...)
 		local totalTimePlayed, _ = ...
 		local storedTime = Hardcore_Character.time_played or 0
 		local timeDiff = math.abs(totalTimePlayed - storedTime)
-        
-        -- DEBUG START
-        Hardcore:Print("|cff00FFFF[DEBUG] Time Verification Running...|r")
-        Hardcore:Print("   Server Time: " .. tostring(totalTimePlayed))
-        Hardcore:Print("   Stored Time: " .. tostring(storedTime))
-        Hardcore:Print("   Difference: " .. tostring(timeDiff) .. " seconds")
-        -- DEBUG END
 
 		-- Tolerance Window: 15 Minutes (900 seconds) to account for minor sync differences
 		if timeDiff < 900 then
@@ -2153,17 +2072,6 @@ function Hardcore:TIME_PLAYED_MSG(...)
 		-- store level record
 		table.insert(Hardcore_Settings.level_list, mylevelup)
 	end
-end
-
-local Cached_ChatFrame_DisplayTimePlayed = ChatFrame_DisplayTimePlayed
-ChatFrame_DisplayTimePlayed = function(...)
-    -- If the user didn't type /played manually, hide the output.
-    if not Hardcore.UserRequestedPlayed then
-        return 
-    end
-
-    -- If the user asked for it, let it through.
-    return Cached_ChatFrame_DisplayTimePlayed(...)
 end
 
 function Hardcore:RequestTimePlayed()
@@ -2482,45 +2390,22 @@ function Hardcore:CHAT_MSG_ADDON(prefix, datastr, scope, sender)
 	end
 end
 
-function Hardcore:COMBAT_LOG_EVENT_UNFILTERED(...)
-	-- local time, token, hidding, source_serial, source_name, caster_flags, caster_flags2, target_serial, target_name, target_flags, target_flags2, ability_id, ability_name, ability_type, extraSpellID, extraSpellName, extraSchool = CombatLogGetCurrentEventInfo()
-	local _, ev, _, _, source_name, _, _, target_guid, _, _, _, arg12, _, _, _, _, _ =
-		CombatLogGetCurrentEventInfo()
-
-	if not (source_name == PLAYER_NAME) then
-		if not (source_name == nil) then
-			if string.find(ev, "DAMAGE") ~= nil then
-				Last_Attack_Source = source_name
-				DeathLog_Last_Attack_Source = source_name
-			end
-
-			-- Check for Arthas' event mass death
-			if ev == "SPELL_DAMAGE" and arg12 == 72350 then -- Fury of Frostmourne 72350, Lich King's Fury 60536, Fireball 11921
-				Hardcore_Character.FuryOfFrostMourneTime = GetServerTime()
-				Hardcore:Debug( "The Fury of Frostmourne has been cast!")
-			end
-		end
-	end
-
-	-- Environmental damage for Death Log
-	if ev == "ENVIRONMENTAL_DAMAGE" then
-		if target_guid == UnitGUID("player") then
-			local environmental_type = arg12
-			if environmental_type == "Drowning" then
-				DeathLog_Last_Attack_Source = -2
-			elseif environmental_type == "Falling" then
-				DeathLog_Last_Attack_Source = -3
-			elseif environmental_type == "Fatigue" then
-				DeathLog_Last_Attack_Source = -4
-			elseif environmental_type == "Fire" then
-				DeathLog_Last_Attack_Source = -5
-			elseif environmental_type == "Lava" then
-				DeathLog_Last_Attack_Source = -6
-			elseif environmental_type == "Slime" then
-				DeathLog_Last_Attack_Source = -7
-			end
-		end
-	end
+function Hardcore:UNIT_COMBAT(...)
+    local unit, action = ...
+    
+    -- Whenever the player takes damage (WOUND)
+    if unit == "player" and action == "WOUND" then
+        -- Assume our current hostile target is the source
+        if UnitExists("target") and UnitCanAttack("player", "target") then
+            local source_name = UnitName("target")
+            Last_Attack_Source = source_name
+            DeathLog_Last_Attack_Source = source_name
+        else
+            -- Fallback if we take damage from AoE or from behind without a target
+            Last_Attack_Source = "an unknown enemy"
+            DeathLog_Last_Attack_Source = "an unknown enemy"
+        end
+    end
 end
 
 function Hardcore:CHAT_MSG_SAY(...)
@@ -2573,7 +2458,7 @@ function Hardcore:CHAT_MSG_GUILD(...)
 	end
 
 	local message, sn, LN, CN, p2, sF, zcI, cI, cB, unu, lI, senderGUID = ...
-	local rea_name, rea_class, rea_level = string.match(message, "(%w+) the (%w+) has reached level (%w+)!")
+	local rea_name, rea_class, rea_level = string.match(message, "(.-) the (%a+) has reached level (%d+)!")
 	if rea_name and rea_class and rea_level then
 		levelToast(rea_name, rea_class, rea_level)
 	end
@@ -3302,7 +3187,11 @@ function Hardcore:initMinimapButton()
 		end
 		
 		if arg1 == "RightButton" then
-			Settings.OpenToCategory("Hardcore")
+			if LibStub("AceConfigDialog-3.0", true) then
+				LibStub("AceConfigDialog-3.0"):Open("Hardcore")
+			else
+				InterfaceOptionsFrame_OpenToCategory("Hardcore")
+			end
 		end
 	end
 
@@ -3620,55 +3509,58 @@ end
 
 function Hardcore:RequestCharacterData(dest)
 	if CTL then
+		local target = dest
+		-- Removed legacy quote wrapping here
 		local commMessage = COMM_COMMANDS[5] .. COMM_COMMAND_DELIM .. ""
-		CTL:SendAddonMessage("ALERT", COMM_NAME, commMessage, "WHISPER", dest)
+		CTL:SendAddonMessage("ALERT", COMM_NAME, commMessage, "WHISPER", target)
 	end
 end
 
 function Hardcore:SendCharacterData(dest)
 	if CTL then
+		local target = dest
+		-- Removed legacy quote wrapping here
 		local commMessage = COMM_COMMANDS[4] .. COMM_COMMAND_DELIM
-		commMessage = commMessage .. C_AddOns.GetAddOnMetadata("Hardcore", "Version") .. COMM_FIELD_DELIM -- Add Version
+		commMessage = commMessage .. C_AddOns.GetAddOnMetadata("Hardcore", "Version") .. COMM_FIELD_DELIM		
 		if Hardcore_Character.first_recorded ~= nil and Hardcore_Character.first_recorded ~= -1 then
-			commMessage = commMessage .. Hardcore_Character.first_recorded .. COMM_FIELD_DELIM -- Add creation time
+			commMessage = commMessage .. Hardcore_Character.first_recorded .. COMM_FIELD_DELIM
 		else
-			commMessage = commMessage .. "-1" .. COMM_FIELD_DELIM -- Add unknown creation time
+			commMessage = commMessage .. "-1" .. COMM_FIELD_DELIM
 		end
 
 		for i, v in ipairs(Hardcore_Character.achievements) do
-			commMessage = commMessage .. _G.a_id[v] .. COMM_SUBFIELD_DELIM -- Add unknown creation time
+			commMessage = commMessage .. _G.a_id[v] .. COMM_SUBFIELD_DELIM
 		end
 
 		commMessage = commMessage .. COMM_FIELD_DELIM .. COMM_FIELD_DELIM
 
 		if Hardcore_Character.party_mode ~= nil then
-			commMessage = commMessage .. Hardcore_Character.party_mode .. COMM_FIELD_DELIM -- Add unknown creation time
+			commMessage = commMessage .. Hardcore_Character.party_mode .. COMM_FIELD_DELIM
 		else
-			commMessage = commMessage .. "?" .. COMM_SUBFIELD_DELIM -- Add unknown creation time
+			commMessage = commMessage .. "?" .. COMM_SUBFIELD_DELIM
 		end
 
-		commMessage = commMessage .. COMM_FIELD_DELIM
-		commMessage = commMessage .. COMM_FIELD_DELIM
+		commMessage = commMessage .. COMM_FIELD_DELIM .. COMM_FIELD_DELIM
 
 		for i, v in ipairs(Hardcore_Character.team) do
-			commMessage = commMessage .. v .. COMM_SUBFIELD_DELIM -- Add unknown creation time
+			commMessage = commMessage .. v .. COMM_SUBFIELD_DELIM
 		end
 
 		commMessage = commMessage .. COMM_FIELD_DELIM
-
-		commMessage = commMessage .. (Hardcore_Character.hardcore_player_name or "") .. COMM_FIELD_DELIM -- Add Version
+		commMessage = commMessage .. (Hardcore_Character.hardcore_player_name or "") .. COMM_FIELD_DELIM 
 
 		for i, v in ipairs(Hardcore_Character.passive_achievements) do
-			commMessage = commMessage .. _G.pa_id[v] .. COMM_SUBFIELD_DELIM -- Add unknown creation time
+			commMessage = commMessage .. _G.pa_id[v] .. COMM_SUBFIELD_DELIM 
 		end
-		-- Add verification status
+		
 		Hardcore:UpdateVerificationStatus()
 		commMessage = commMessage .. COMM_FIELD_DELIM
 		commMessage = commMessage .. Hardcore_Character.verification_status
 		commMessage = commMessage .. COMM_FIELD_DELIM
 		commMessage = commMessage .. Hardcore_Character.verification_details
 
-		CTL:SendAddonMessage("ALERT", COMM_NAME, commMessage, "WHISPER", dest)
+		-- SEND TO RAW DEST
+		CTL:SendAddonMessage("ALERT", COMM_NAME, commMessage, "WHISPER", target)
 	end
 end
 
@@ -3706,6 +3598,8 @@ function Hardcore:InitiatePulsePlayed()
 		end
 		Hardcore_Character.time_tracked = Hardcore_Character.time_tracked + TIME_TRACK_PULSE
 		if RECEIVED_FIRST_PLAYED_TIME_MSG == true then
+			-- Fix: Increment time_played locally to avoid protected API polling
+			Hardcore_Character.time_played = Hardcore_Character.time_played + TIME_TRACK_PULSE
 			Hardcore_Character.accumulated_time_diff = Hardcore_Character.time_played - Hardcore_Character.time_tracked
 		end
 		-- Tell the watchdog we are still alive
@@ -3713,9 +3607,8 @@ function Hardcore:InitiatePulsePlayed()
 	end)
 
 	--played time tracking
-	C_Timer.NewTicker(TIME_PLAYED_PULSE, function()
-		Hardcore:RequestTimePlayed()
-	end)
+	-- Fix: Removed the 60-second RequestTimePlayed() ticker.
+	-- Server polling is now restricted to login and level-ups to prevent API warnings and chat spam.
 end
 
 function Hardcore:ReceivePulse(data, sender)
@@ -4332,12 +4225,11 @@ local options = {
 					end,
 					set = function()
 						Hardcore_Settings.show_minimap_mailbox_icon = not Hardcore_Settings.show_minimap_mailbox_icon
-						if Hardcore_Settings.show_minimap_mailbox_icon == true then
-							MiniMapMailIcon:Show()
-							MiniMapMailBorder:Show()
-						else
-							MiniMapMailIcon:Hide()
-							MiniMapMailBorder:Hide()
+						local show = Hardcore_Settings.show_minimap_mailbox_icon
+						if MiniMapMailIcon then MiniMapMailIcon:SetShown(show) end
+						if MiniMapMailBorder then MiniMapMailBorder:SetShown(show) end
+						if MinimapCluster and MinimapCluster.IndicatorFrame and MinimapCluster.IndicatorFrame.MailFrame then
+							MinimapCluster.IndicatorFrame.MailFrame:SetShown(show)
 						end
 					end,
 					order = 10,
@@ -4474,7 +4366,7 @@ local options = {
 }
 
 LibStub("AceConfig-3.0"):RegisterOptionsTable("Hardcore", options)
-optionsFrame = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("Hardcore", "Hardcore")
+LibStub("AceConfigDialog-3.0"):AddToBlizOptions("Hardcore", "Hardcore")
 
 reorderPassiveAchievements()
 --[[ Start Addon ]]

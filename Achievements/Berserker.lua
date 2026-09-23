@@ -28,45 +28,58 @@ end
 berserker_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "PLAYER_EQUIPMENT_CHANGED" then
-		if arg[2] == true then
-			return
-		end
-		local item_id = GetInventoryItemID("player", arg[1])
-		local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
-		if item_type == "Armor" then
-			if item_subtype == "Shields" or item_subtype == "Mail" or item_subtype == "Plate" then
-				local time_elapsed = 0 -- seconds
-				C_Timer.NewTicker(1, function(self)
-					time_elapsed = time_elapsed + 1
-					Hardcore:Print(
-						"<Berserker>: Unequip Mail or Plate weapon, "
-							.. item_name
-							.. ", or your achievement will fail in "
-							.. 60 - time_elapsed
-							.. " seconds."
-					)
-					if IsEquippedItem(item_id) == false then
-						Hardcore:Print("<Berserker>: You unequipped " .. item_name .. ". No further action needed.")
-						self:Cancel()
-						return
-					end
-					if time_elapsed > 60 then
-						Hardcore:Print("Equiped " .. item_name .. ".")
-						berserker_achievement.fail_function_executor.Fail(berserker_achievement.name)
-
-						self:Cancel()
-					end
-				end)
+		local slot_id = arg[1]
+		if not slot_id then return end
+		
+		local item_id = GetInventoryItemID("player", slot_id)
+		if item_id ~= nil then
+			local item_name, _, _, _, _, item_type, item_subtype = GetItemInfo(item_id)
+			if item_type == "Armor" then
+				if item_subtype == "Shields" or item_subtype == "Mail" or item_subtype == "Plate" then
+					local time_elapsed = 0 -- seconds
+					C_Timer.NewTicker(1, function(ticker)
+						time_elapsed = time_elapsed + 1
+						Hardcore:Print(
+							"<Berserker>: Unequip Mail or Plate armor, "
+								.. item_name
+								.. ", or your achievement will fail in "
+								.. 60 - time_elapsed
+								.. " seconds."
+						)
+						
+						-- Vanilla-friendly check instead of the unsupported IsEquippedItem()
+						local still_equipped = false
+						for i = 1, 19 do
+							if GetInventoryItemID("player", i) == item_id then
+								still_equipped = true
+								break
+							end
+						end
+						
+						if not still_equipped then
+							Hardcore:Print("<Berserker>: You unequipped " .. item_name .. ". No further action needed.")
+							ticker:Cancel()
+							return
+						end
+						
+						if time_elapsed >= 60 then
+							Hardcore:Print("Equipped forbidden item: " .. item_name .. ".")
+							berserker_achievement.fail_function_executor.Fail(berserker_achievement.name)
+							ticker:Cancel()
+						end
+					end)
+				end
 			end
 		end
 	elseif event == "PLAYER_LEVEL_UP" then
-		for i = 1, 15 do
+		-- Expanded to 19 to properly include slot 17 (Off-hand / Shields)
+		for i = 1, 19 do
 			local item_id = GetInventoryItemID("player", i)
 			if item_id ~= nil then
-				local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
+				local item_name, _, _, _, _, item_type, item_subtype = GetItemInfo(item_id)
 				if item_type == "Armor" then
 					if item_subtype == "Shields" or item_subtype == "Mail" or item_subtype == "Plate" then
-						Hardcore:Print("Equiped " .. item_name .. ".")
+						Hardcore:Print("Equipped forbidden item: " .. item_name .. ".")
 						berserker_achievement.fail_function_executor.Fail(berserker_achievement.name)
 					end
 				end

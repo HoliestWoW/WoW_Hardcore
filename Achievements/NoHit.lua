@@ -7,10 +7,14 @@ no_hit_achievement.name = "NoHit"
 no_hit_achievement.title = "Stadics' Challenge"
 no_hit_achievement.icon_path = "Interface\\Addons\\Hardcore\\Media\\icon_no_hit.blp"
 no_hit_achievement.pts = 50
-no_hit_achievement.description =
-	"Complete the hardcore challenge without taking a point of damage.  Falling, drowning, fatigue and other such sources that count as “Environmental Damage” according to the Combat Log are, as such, Damage. This also means that spells that expend life as a resource, such as the Warlock’s Life Tap, do not cause any 'damage' and are as such perfectly viable.  Futhermore, you must accumulate over 45,000 reputation across the four main factions."
+no_hit_achievement.description = "Complete the hardcore challenge without taking a point of damage..."
 no_hit_achievement.class = "All"
 no_hit_achievement.alert_on_fail = 1
+
+-- Add restriction so it safely skips loading on restricted clients
+no_hit_achievement.restricted_game_versions = {
+	["Camelot"] = 1, -- Or whatever your client build label evaluates to
+}
 
 local faction_indices = { 2, 3, 4, 5 }
 
@@ -70,9 +74,18 @@ end
 
 -- Registers
 function no_hit_achievement:Register(fail_function_executor)
-	no_hit_achievement:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-	no_hit_achievement.fail_function_executor = fail_function_executor
-	no_hit_achievement:UpdateDescription()
+	-- Only attempt registration if allowed by the client engine
+	local success = pcall(function()
+		no_hit_achievement:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+	end)
+	
+	if success then
+		no_hit_achievement.fail_function_executor = fail_function_executor
+		no_hit_achievement:UpdateDescription()
+	else
+		-- Gracefully disable if forbidden by client security
+		print("[Hardcore] NoHit achievement disabled: COMBAT_LOG_EVENT_UNFILTERED is restricted on this client.")
+	end
 end
 
 function no_hit_achievement:Unregister()

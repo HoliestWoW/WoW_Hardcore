@@ -1,4 +1,41 @@
 local _G = _G
+
+-- MODERN CLIENT POLYFILLS (Fixes nil crashes for removed WoW APIs)
+if not _G.GetSpellTabInfo and _G.C_SpellBook and _G.C_SpellBook.GetSpellBookSkillLineInfo then
+	_G.GetSpellTabInfo = function(index)
+		local info = _G.C_SpellBook.GetSpellBookSkillLineInfo(index)
+		if info then
+			return info.name, info.iconID, info.itemIndexOffset, info.numSpellBookItems, info.isGuild, info.offSpecID
+		end
+	end
+end
+
+if not _G.GetSpellInfo and _G.C_Spell and _G.C_Spell.GetSpellInfo then
+	_G.GetSpellInfo = function(spellIdentifier)
+		if not spellIdentifier then return nil end
+		local info = _G.C_Spell.GetSpellInfo(spellIdentifier)
+		if info then
+			return info.name, nil, info.iconID, info.castTime, info.minRange, info.maxRange, info.spellID, info.originalIconID
+		end
+	end
+end
+
+if not _G.C_ActionBar then _G.C_ActionBar = {} end
+if type(_G.C_ActionBar.FindSpellActionButtons) ~= "function" then
+	_G.C_ActionBar.FindSpellActionButtons = function(spellID)
+		local buttons = {}
+		if _G.GetActionInfo then
+			for i = 1, 120 do
+				local actionType, id = _G.GetActionInfo(i)
+				if actionType == "spell" and id == spellID then
+					table.insert(buttons, i)
+				end
+			end
+		end
+		return buttons
+	end
+end
+
 _G.achievements = {}
 _G.achievements_order = {}
 _G.extra_rules = {}
@@ -148,7 +185,7 @@ for k in pairs(_G.pa_id) do
 	table.insert(_G.passive_achievements_order, k)
 end
 
--- sort function from stack overflow
+-- sort function (rewritten to avoid the WoW table.sort taint bug)
 local function spairs(t, order)
 	local keys = {}
 	for k in pairs(t) do
@@ -156,11 +193,27 @@ local function spairs(t, order)
 	end
 
 	if order then
-		table.sort(keys, function(a, b)
-			return order(t, a, b)
-		end)
+		-- Manual Insertion Sort
+		for i = 2, #keys do
+			local key = keys[i]
+			local j = i - 1
+			while j > 0 and order(t, keys[j], key) == false do
+				keys[j + 1] = keys[j]
+				j = j - 1
+			end
+			keys[j + 1] = key
+		end
 	else
-		table.sort(keys)
+		-- Manual Insertion Sort (default ascending)
+		for i = 2, #keys do
+			local key = keys[i]
+			local j = i - 1
+			while j > 0 and keys[j] > key do
+				keys[j + 1] = keys[j]
+				j = j - 1
+			end
+			keys[j + 1] = key
+		end
 	end
 
 	local i = 0
@@ -300,7 +353,6 @@ end
 passive_achievement_kill_handler:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "CHAT_MSG_COMBAT_XP_GAIN" then
-		local combat_log_payload = { CombatLogGetCurrentEventInfo() }
 		local v = arg[1]:match("(.+) dies")
 		if kill_list_dict[v] then
 			if Hardcore_Character then
@@ -319,7 +371,9 @@ passive_achievement_kill_handler:SetScript("OnEvent", function(self, event, ...)
 						)
 					end
 					for _, registered_kill_event_achievement in pairs(registered_kill_event_achievements) do
-						registered_kill_event_achievement:HandleKillEvent(v, Hardcore_Character)
+						if type(registered_kill_event_achievement.HandleKillEvent) == "function" then
+							registered_kill_event_achievement:HandleKillEvent(v, Hardcore_Character)
+						end
 					end
 				end
 				Hardcore_Character.kill_list_dict[v] = 1
@@ -366,8 +420,10 @@ function HCCommonPassiveAchievementKillCheck(_achievement, _event, _args)
 				or (hc_recent_level_up and UnitLevel("player") <= _achievement.level_cap + 1)
 			)
 		then
+			-- HYBRID CHECK: Bypass strict combat log requirements if on Camelot API
 			if
-				Hardcore_Character.kill_list_dict ~= nil and Hardcore_Character.kill_list_dict[_achievement.kill_target]
+				is_camelot 
+				or (Hardcore_Character.kill_list_dict ~= nil and Hardcore_Character.kill_list_dict[_achievement.kill_target])
 			then
 				_achievement.succeed_function_executor.Succeed(_achievement.name)
 			else
@@ -437,10 +493,22 @@ function HCCommonPassiveAchievementProfLevelCheck(_achievement, _event, _args)
 		return
 	end
 	if _event == "SKILL_LINES_CHANGED" or _event == "PLAYER_ENTERING_WORLD" then
-		for i = 1, GetNumSkillLines() do
-			local arg, _, _, lvl = GetSkillLineInfo(i)
-			if arg == _achievement.profession_name then
-				if lvl >= _achievement.profession_threshold then
+		-- Modern WoW / Cataclysm API
+		if GetProfessions then
+			local profs = {GetProfessions()}
+			for _, profIndex in pairs(profs) do
+				if type(profIndex) == "number" then
+					local name, _, skillLevel = GetProfessionInfo(profIndex)
+					if name == _achievement.profession_name and skillLevel >= _achievement.profession_threshold then
+						_achievement.succeed_function_executor.Succeed(_achievement.name)
+					end
+				end
+			end
+		-- Classic Era API
+		elseif GetNumSkillLines then
+			for i = 1, GetNumSkillLines() do
+				local name, _, _, skillLevel = GetSkillLineInfo(i)
+				if name == _achievement.profession_name and skillLevel >= _achievement.profession_threshold then
 					_achievement.succeed_function_executor.Succeed(_achievement.name)
 				end
 			end
@@ -468,18 +536,16 @@ function SetAchievementTooltip(achievement_icon, achievement, _player_name)
 		if UnitName("player") == _player_name and achievement.UpdateDescription then
 			achievement:UpdateDescription()
 		end
-		GameTooltip:SetOwner(WorldFrame, "ANCHOR_CURSOR")
+		
+		-- SECURE FIX: Anchor to the widget's own frame to prevent taint
+		GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
+		
 		GameTooltip:AddLine(achievement.title)
 		GameTooltip:AddLine(achievement.description, 1, 1, 1, true)
 		GameTooltip:AddDoubleLine(
 			achievement.bl_text or "Starting Achievement",
 			(achievement.pts or tostring(0)) .. "pts",
-			1,
-			0.82,
-			0,
-			1,
-			0.82,
-			0
+			1, 0.82, 0, 1, 0.82, 0
 		)
 		GameTooltip:Show()
 	end)

@@ -19,6 +19,7 @@ local blacklisted_spells = {
 	[4042] = 1,		-- Combat Healing Potion / Superior Healing Potion
 	[17534] = 1,	-- Major Healing Potion / The McWeakSauce Classic
 }
+
 -- Registers
 function no_health_potions_achievement:Register(fail_function_executor)
 	no_health_potions_achievement:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
@@ -33,13 +34,15 @@ end
 no_health_potions_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
-		local unit, _, spell_id, _, _ = ...
-		if unit ~= "player" then
+		local unit, _, spell_id = ...
+		if unit ~= "player" or not spell_id then
 			return
 		end
-		local spell_name = GetSpellInfo(spell_id)
+		
 		if blacklisted_spells[spell_id] ~= nil then
-			Hardcore:Print("Casted healing potion spell." .. spell_name)
+			local spell_name = GetSpellInfo(spell_id)
+			-- Safely prints the spell name if available, or just the ID if Camelot restricts it
+			Hardcore:Print("Casted healing potion spell: " .. tostring(spell_name or spell_id))
 			no_health_potions_achievement.fail_function_executor.Fail(no_health_potions_achievement.name)
 		end
 	end

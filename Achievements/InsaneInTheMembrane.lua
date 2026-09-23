@@ -15,8 +15,15 @@ insane_in_the_membrane_achievement.description =
 function insane_in_the_membrane_achievement:Register(fail_function_executor)
 	insane_in_the_membrane_achievement.timer_handle = C_Timer.NewTicker(1.0, function()
 		if UnitIsPVP("player") == false then
-			Hardcore:Print("Turning on PVP flag for Insane in the Membrane.")
-			SetPVP(1)
+			if SetPVP then
+				Hardcore:Print("Turning on PVP flag for Insane in the Membrane.")
+				SetPVP(1)
+			else
+				if not insane_in_the_membrane_achievement.warned_pvp then
+					Hardcore:Print("Please manually enable your PvP flag for Insane in the Membrane.")
+					insane_in_the_membrane_achievement.warned_pvp = true
+				end
+			end
 		end
 	end)
 	insane_in_the_membrane_achievement.fail_function_executor = fail_function_executor

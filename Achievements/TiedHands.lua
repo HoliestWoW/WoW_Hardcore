@@ -30,15 +30,19 @@ end
 tied_hands_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
-		local unit, _, spell_id, _, _ = ...
-		if unit ~= "player" then
+		local unit, _, spell_id = ...
+		if unit ~= "player" or not spell_id then
 			return
 		end
+		
+		local spell_name = GetSpellInfo(spell_id)
+		if not spell_name then return end -- Camelot nil safety
+		
 		for i, blacklist_spell_named in ipairs(blacklist_spells_named) do
-			local spell_name = GetSpellInfo(spell_id)
 			if spell_name == blacklist_spell_named then
-				Hardcore:Print("Casted disallowed stance " .. blacklist_spell_named)
+				Hardcore:Print("Casted disallowed stance: " .. blacklist_spell_named)
 				tied_hands_achievement.fail_function_executor.Fail(tied_hands_achievement.name)
+				return
 			end
 		end
 	end

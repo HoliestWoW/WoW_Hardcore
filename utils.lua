@@ -1,14 +1,28 @@
 _G["HardcoreBuildLabel"] = nil
 local build_num = select(4, GetBuildInfo())
-if build_num > 39999 then
+_G.HC_TOC_VERSION = build_num
+
+_G["HardcoreBuildLabel"] = nil
+local build_num = select(4, GetBuildInfo())
+_G.HC_TOC_VERSION = build_num
+
+if build_num == 16001 or (build_num >= 16000 and build_num < 17000) then
+	_G["HardcoreBuildLabel"] = "Camelot"
+	_G.HC_IS_CAMELOT = true
+elseif build_num > 39999 then
 	_G["HardcoreBuildLabel"] = "Cata"
+	_G.HC_IS_CAMELOT = false
 elseif build_num > 29999 then
 	_G["HardcoreBuildLabel"] = "WotLK"
+	_G.HC_IS_CAMELOT = false
 elseif build_num > 19999 then
 	_G["HardcoreBuildLabel"] = "TBC"
+	_G.HC_IS_CAMELOT = false
 else
 	_G["HardcoreBuildLabel"] = "Classic"
+	_G.HC_IS_CAMELOT = false
 end
+
 function Hardcore_stringOrNumberToUnicode(val)
 	local str
 	if Hardcore_IsNumber(val) then

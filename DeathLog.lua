@@ -370,18 +370,52 @@ for i=1,20 do
 		local click_type = GetMouseButtonClicked()
 
 		if click_type == "LeftButton" then
-		  if selected then row_entry[selected]:deselect() end
-		  _entry:select()
+			if selected then row_entry[selected]:deselect() end
+			_entry:select()
 		elseif click_type == "RightButton" then
-		   local dropDown = CreateFrame("Frame", "WPDemoContextMenu", UIParent, "UIDropDownMenuTemplate")
-		   -- Bind an initializer function to the dropdown; see previous sections for initializer function examples.
-		   UIDropDownMenu_Initialize(dropDown, WPDropDownDemo_Menu, "MENU")
-		   ToggleDropDownMenu(1, nil, dropDown, "cursor", 3, -3)
-		   if _entry["player_data"]["map_id"] and _entry["player_data"]["map_pos"] then
-		     death_tomb_frame.map_id = _entry["player_data"]["map_id"] 
-		     local x, y = strsplit(",", _entry["player_data"]["map_pos"],2)
-		     death_tomb_frame.coordinates = {x,y}
-		   end
+			if not HC_DeathLogContextMenu then
+				local menu = CreateFrame("Frame", "HC_DeathLogContextMenu", UIParent, "BackdropTemplate")
+				menu:SetSize(180, 40)
+				menu:SetFrameStrata("TOOLTIP")
+				menu:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 16, insets = {left = 4, right = 4, top = 4, bottom = 4} })
+				
+				local btn1 = CreateFrame("Button", nil, menu, "UIPanelButtonTemplate")
+				btn1:SetSize(150, 22)
+				btn1:SetPoint("CENTER", 0, 0)
+				btn1:SetText("Show death location")
+				menu.btn1 = btn1
+				
+				menu:SetScript("OnUpdate", function(self)
+					if IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton") then
+						if not self:IsMouseOver() then self:Hide() end
+					end
+				end)
+				HC_DeathLogContextMenu = menu
+			end
+			
+			local menu = HC_DeathLogContextMenu
+			menu.btn1:SetScript("OnClick", function()
+				if _entry["player_data"]["map_id"] and _entry["player_data"]["map_pos"] then
+					death_tomb_frame.map_id = _entry["player_data"]["map_id"] 
+					local x, y = strsplit(",", _entry["player_data"]["map_pos"], 2)
+					death_tomb_frame.coordinates = {x, y}
+					if C_Map.GetMapInfo(death_tomb_frame.map_id) then
+						WorldMapFrame:SetShown(not WorldMapFrame:IsShown())
+						WorldMapFrame:SetMapID(death_tomb_frame.map_id)
+						local mWidth, mHeight = WorldMapFrame:GetCanvas():GetSize()
+						death_tomb_frame_tex:SetPoint('CENTER', WorldMapButton, 'TOPLEFT', mWidth * death_tomb_frame.coordinates[1], -mHeight * death_tomb_frame.coordinates[2])
+						death_tomb_frame_tex:Show()
+						death_tomb_frame_tex_glow:SetPoint('CENTER', WorldMapButton, 'TOPLEFT', mWidth * death_tomb_frame.coordinates[1], -mHeight * death_tomb_frame.coordinates[2])
+						death_tomb_frame_tex_glow:Show()
+						death_tomb_frame:Show()
+					end
+				end
+				menu:Hide()
+			end)
+			local x, y = GetCursorPosition()
+			local scale = UIParent:GetEffectiveScale()
+			menu:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x/scale + 2, y/scale - 2)
+			menu:Show()
 		end
 	end)
 
@@ -782,15 +816,15 @@ local function sendNextInQueue()
 	end
 end
 
--- Note: We can only send at most 1 message per click, otherwise we get a taint
-WorldFrame:HookScript("OnMouseDown", function(self, button)
-  sendNextInQueue()
+-- Securely pump the deathlog queue using native hardware event bindings
+-- This avoids tainting the 3D WorldFrame target selection
+hooksecurefunc("CameraOrSelectOrMoveStart", function()
+	sendNextInQueue()
 end)
 
--- This binds any key press to send, including hitting enter to type or esc to exit game
-local f  = Test or CreateFrame("Frame", "Test", UIParent)
-f:SetScript("OnKeyDown", sendNextInQueue)
-f:SetPropagateKeyboardInput(true)
+hooksecurefunc("TurnOrActionStart", function()
+	sendNextInQueue()
+end)
 
 death_log_icon_frame:RegisterForDrag("LeftButton")
 death_log_icon_frame:SetScript("OnDragStart", function(self, button)
@@ -808,50 +842,60 @@ death_log_icon_frame:SetScript("OnDragStop", function(self)
 	hardcore_settings['death_log_pos']['y'] = y - py
 end)
 
- function DeathFrameDropdown(frame, level, menuList)
-  local info = UIDropDownMenu_CreateInfo()
+death_log_icon_frame:SetScript("OnMouseUp", function (self, button)
+    if button == 'RightButton' then 
+        if not HC_DeathLogSettingsMenu then
+            local menu = CreateFrame("Frame", "HC_DeathLogSettingsMenu", UIParent, "BackdropTemplate")
+            menu:SetSize(120, 90)
+            menu:SetFrameStrata("TOOLTIP")
+            menu:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 16, insets = {left = 4, right = 4, top = 4, bottom = 4} })
+            
+            local btn1 = CreateFrame("Button", nil, menu, "UIPanelButtonTemplate")
+            btn1:SetSize(100, 22)
+            btn1:SetPoint("TOP", 0, -12)
+            
+            local btn2 = CreateFrame("Button", nil, menu, "UIPanelButtonTemplate")
+            btn2:SetSize(100, 22)
+            btn2:SetPoint("TOP", btn1, "BOTTOM", 0, -2)
+            btn2:SetText("Settings")
+            btn2:SetScript("OnClick", function()
+                if LibStub("AceConfigDialog-3.0", true) then LibStub("AceConfigDialog-3.0"):Open("Hardcore") end
+                menu:Hide()
+            end)
 
-  local function minimize()
-   death_log_frame:Minimize()
-  end
-
-  local function maximize()
-   death_log_frame:Maximize()
-  end
-
-  local function hide()
-   death_log_frame.frame:Hide()
-   death_log_icon_frame:Hide()
-   hardcore_settings["death_log_show"] = false
-  end
-
-  local function openSettings()
-    InterfaceOptionsFrame_Show()
-    InterfaceOptionsFrame_OpenToCategory("Hardcore")
-  end
-
-  if level == 1 then
-   if death_log_frame:IsMinimized() then
-     info.text, info.hasArrow, info.func = "Maximize", false, maximize 
-     UIDropDownMenu_AddButton(info)
-   else
-     info.text, info.hasArrow, info.func = "Minimize", false, minimize 
-     UIDropDownMenu_AddButton(info)
-   end
-
-   info.text, info.hasArrow, info.func = "Settings", false, openSettings 
-   UIDropDownMenu_AddButton(info)
-
-   info.text, info.hasArrow, info.func = "Hide", false, hide
-   UIDropDownMenu_AddButton(info)
-  end
- end
-
-death_log_icon_frame:SetScript("OnMouseDown", function (self, button)
-    if button=='RightButton' then 
-	   local dropDown = CreateFrame("Frame", "death_frame_dropdown_menu", UIParent, "UIDropDownMenuTemplate")
-	   UIDropDownMenu_Initialize(dropDown, DeathFrameDropdown, "MENU")
-	   ToggleDropDownMenu(1, nil, dropDown, "cursor", 3, -3)
+            local btn3 = CreateFrame("Button", nil, menu, "UIPanelButtonTemplate")
+            btn3:SetSize(100, 22)
+            btn3:SetPoint("TOP", btn2, "BOTTOM", 0, -2)
+            btn3:SetText("Hide")
+            btn3:SetScript("OnClick", function()
+                death_log_frame.frame:Hide()
+                death_log_icon_frame:Hide()
+                hardcore_settings["death_log_show"] = false
+                menu:Hide()
+            end)
+            
+            menu.btn1 = btn1
+            menu:SetScript("OnUpdate", function(self)
+                if IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton") then
+                    if not self:IsMouseOver() then self:Hide() end
+                end
+            end)
+            HC_DeathLogSettingsMenu = menu
+        end
+        
+        local menu = HC_DeathLogSettingsMenu
+        if death_log_frame:IsMinimized() then
+            menu.btn1:SetText("Maximize")
+            menu.btn1:SetScript("OnClick", function() death_log_frame:Maximize(); menu:Hide() end)
+        else
+            menu.btn1:SetText("Minimize")
+            menu.btn1:SetScript("OnClick", function() death_log_frame:Minimize(); menu:Hide() end)
+        end
+        
+        local x, y = GetCursorPosition()
+        local scale = UIParent:GetEffectiveScale()
+        menu:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x/scale + 2, y/scale - 2)
+        menu:Show()
     end
 end)
 
@@ -913,11 +957,9 @@ end
 
 death_log_handler:SetScript("OnEvent", handleEvent)
 
--- This function is for testing; only sends to self
-function fakeDeathAlert(event, msg, sender)
-	handleEvent(death_log_handler, event, msg, sender)
-end
-
-hooksecurefunc(WorldMapFrame, 'OnMapChanged', function()
-  death_tomb_frame:Hide()
+-- Process the deathlog queue safely via a background ticker (Taint-Free)
+C_Timer.NewTicker(0.5, function()
+    if not InCombatLockdown() then
+        sendNextInQueue()
+    end
 end)

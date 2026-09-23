@@ -29,10 +29,14 @@ white_knight_achievement:SetScript("OnEvent", function(self, event, ...)
 			return
 		end
 		local item_id = GetInventoryItemID("player", arg[1])
-		local item_name, _, item_rarity, _, _, _, _, _, _, _, _ = GetItemInfo(item_id)
-		if item_rarity > 1 then -- 0: poor (gray), 1: common (white), 2: uncommon (green) ...
-			Hardcore:Print("Equiped " .. item_name .. " with rarity " .. item_rarity)
-			white_knight_achievement.fail_function_executor.Fail(white_knight_achievement.name)
+		
+		-- FIX: Safely verify the item exists before calling GetItemInfo
+		if item_id ~= nil then
+			local item_name, _, item_rarity = GetItemInfo(item_id)
+			if item_rarity and item_rarity > 1 then -- 0: poor (gray), 1: common (white), 2: uncommon (green) ...
+				Hardcore:Print("Equipped " .. (item_name or "an item") .. " with rarity " .. item_rarity)
+				white_knight_achievement.fail_function_executor.Fail(white_knight_achievement.name)
+			end
 		end
 	end
 end)

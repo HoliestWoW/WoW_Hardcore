@@ -41,11 +41,11 @@ felfire_achievement:SetScript("OnEvent", function(self, event, ...)
 			return
 		end
 		local combat_log_payload = { CombatLogGetCurrentEventInfo() }
-		-- 2: subevent index, 5: source_name, 14: spell school, 12 is spellID but it appears to be broken
+		
+		-- Safely handles Camelot restricting the combat log source (fails open)
 		if not (combat_log_payload[5] == nil) then
 			if combat_log_payload[5] == UnitName("player") then
 				if string.find(combat_log_payload[2], "SPELL_DAMAGE") ~= nil then
-					-- 2 holy, 4 fire, 8 nature, 16 frost, 32 shadow, 64 arcane
 					if combat_log_payload[14] ~= 4 then
 						felfire_achievement.fail_function_executor.Fail(felfire_achievement.name)
 					end
@@ -53,7 +53,8 @@ felfire_achievement:SetScript("OnEvent", function(self, event, ...)
 			end
 		end
 	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-		if whitelist[arg[3]] then
+		-- Camelot nil safety: ensure arg[3] exists before hitting the whitelist table
+		if arg[3] and whitelist[arg[3]] then
 			temporary_disable = true
 			C_Timer.After(10.0, function()
 				temporary_disable = false

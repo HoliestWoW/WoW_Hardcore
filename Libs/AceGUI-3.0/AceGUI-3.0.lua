@@ -24,7 +24,7 @@
 -- f:AddChild(btn)
 -- @class file
 -- @name AceGUI-3.0
--- @release $Id$
+-- @release $Id: AceGUI-3.0.lua 1288 2022-09-25 14:19:00Z funkehdude $
 local ACEGUI_MAJOR, ACEGUI_MINOR = "AceGUI-3.0", 41
 local AceGUI, oldminor = LibStub:NewLibrary(ACEGUI_MAJOR, ACEGUI_MINOR)
 
@@ -870,8 +870,7 @@ AceGUI:RegisterLayout("Table",
 		local t, laneH, laneV, rowspans, rowStart, colStart = unpack(layoutCache)
 
 		-- Create the grid
-		local n = 0
-		local slotFound
+		local n, slotFound = 0
 		for i,child in ipairs(children) do
 			if child:IsShown() then
 				repeat

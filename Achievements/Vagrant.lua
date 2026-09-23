@@ -27,12 +27,13 @@ end
 vagrant_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
-		local unit, _, spell_id, _, _ = ...
-		if unit ~= "player" then
+		local unit, _, spell_id = ...
+		if unit ~= "player" or not spell_id then
 			return
 		end
+		
 		local spell_name = GetSpellInfo(spell_id)
-		if spell_name == "Hearthstone" then
+		if spell_name and spell_name == "Hearthstone" then
 			Hardcore:Print("Casted hearth spell.")
 			vagrant_achievement.fail_function_executor.Fail(vagrant_achievement.name)
 		end

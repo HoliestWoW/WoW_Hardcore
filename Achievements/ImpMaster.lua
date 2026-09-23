@@ -3,7 +3,8 @@ local imp_master_achievement = CreateFrame("Frame")
 _G.achievements.ImpMaster = imp_master_achievement
 
 local blacklist_spells = {
-	"Summon Succcubus",
+	"Summon Succubus",
+	"Summon Incubus",
 	"Summon Voidwalker",
 	"Summon Felhunter",
 }
@@ -33,10 +34,13 @@ imp_master_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
 		local unit, _, spell_id = ...
-		if unit ~= "player" then
+		if unit ~= "player" or not spell_id then
 			return
 		end
+		
 		local spell_name = GetSpellInfo(spell_id)
+		if not spell_name then return end -- Added Camelot nil safety
+		
 		for i, blacklist_spell in ipairs(blacklist_spells) do
 			if spell_name == blacklist_spell then
 				imp_master_achievement.fail_function_executor.Fail(imp_master_achievement.name)

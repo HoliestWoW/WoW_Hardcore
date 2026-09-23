@@ -315,6 +315,36 @@ local function DrawGeneralTab(container)
 	changelog_title:SetText("\n\nChangelog")
 	changelog_title:SetFont("Interface\\Addons\\Hardcore\\Media\\BreatheFire.ttf", 20, "")
 	scroll_frame:AddChild(changelog_title)
+
+	CreateHeadingLabel("11.61", scroll_frame)
+	CreateDescriptionLabel(
+		"- Updated to support the WoW Forever beta; no achievements yet.",
+		scroll_frame
+	)
+	
+	CreateHeadingLabel("11.60d", scroll_frame)
+	CreateDescriptionLabel(
+		"- Updated Era version.",
+		scroll_frame
+	)
+	
+	CreateHeadingLabel("11.60c", scroll_frame)
+	CreateDescriptionLabel(
+		"- Updated TBC version.",
+		scroll_frame
+	)
+	
+	CreateHeadingLabel("11.60b", scroll_frame)
+	CreateDescriptionLabel(
+		"- Silenced dungeon warnings for max-level characters; achievement syntax errors fixed.",
+		scroll_frame
+	)
+	
+	CreateHeadingLabel("11.60a", scroll_frame)
+	CreateDescriptionLabel(
+		"- Hotfix for duo achievement lua errors.",
+		scroll_frame
+	)
 	
 	CreateHeadingLabel("11.60", scroll_frame)
 	CreateDescriptionLabel(
@@ -717,7 +747,13 @@ local function DrawRulesTab(container)
 
 		local level_label = AceGUI:Create("Label")
 		level_label:SetWidth(80)
-		level_label:SetText("|c00FFFF00Era|r")
+		local _, buildStr = GetBuildInfo()
+		local buildNum = tonumber(buildStr) or 0
+		if (buildNum >= 16001 and buildNum <= 16999) or _G.HC_IS_CAMELOT then
+			level_label:SetText("|c00FFFF00Forever|r")
+		else
+			level_label:SetText("|c00FFFF00Era|r")
+		end
 		level_label:SetFont("Fonts\\FRIZQT__.TTF", 12, "")
 		row_header:AddChild(level_label)
 
@@ -741,7 +777,19 @@ local function DrawRulesTab(container)
 
 		-- Populate the list
 		local max_level_table = DungeonTrackerGetAllDungeonMaxLevels()
-		for i, v in pairs(max_level_table) do
+		
+		-- FIX: Ensure the UI table is strictly sorted by Era Max Level
+		table.sort(max_level_table, function(a, b)
+			local lvlA = tonumber(a[2]) or 1000
+			local lvlB = tonumber(b[2]) or 1000
+			if lvlA == lvlB then
+			    return (a[1] or "") < (b[1] or "")
+			end
+			return lvlA < lvlB
+		end)
+		
+		-- Use ipairs to render the sorted list sequentially
+		for _, v in ipairs(max_level_table) do
 			addEntry(scroll_frame, v[1], v[2], v[3], v[4])
 		end
 
@@ -1150,11 +1198,11 @@ local function DrawLevelsTab(container, _hardcore_settings)
 		DrawLevelsTab(container, _hardcore_settings)
 	end)
 
-	local level_label = AceGUI:Create("InteractiveLabel")
-	level_label:SetWidth(50)
-	level_label:SetText("|c00FFFF00Lvl|r")
-	level_label:SetFont("Fonts\\FRIZQT__.TTF", 12, "")
-	row_header:AddChild(level_label)
+	local level_label = AceGUI:Create("Label")
+		level_label:SetWidth(80)
+		level_label:SetText("|c00FFFF00Lvl|r")
+		level_label:SetFont("Fonts\\FRIZQT__.TTF", 12, "")
+		row_header:AddChild(level_label)
 
 	level_label:SetCallback("OnClick", function(widget)
 		container:ReleaseChildren()

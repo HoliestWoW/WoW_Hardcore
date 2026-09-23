@@ -29,14 +29,17 @@ pacifist_achievement:SetScript("OnEvent", function(self, event, ...)
 			return
 		end
 		local item_id = GetInventoryItemID("player", arg[1])
-		local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
-		if item_type == "Weapon" then
-			print(item_subtype)
-			if item_subtype == "Fishing Poles" or item_subtype == "Fishing Pole" or item_subtype == "Miscellaneous" then
-				return
+		
+		-- Safely verify an item exists before querying info
+		if item_id ~= nil then
+			local item_name, _, _, _, _, item_type, item_subtype = GetItemInfo(item_id)
+			if item_type == "Weapon" then
+				if item_subtype == "Fishing Poles" or item_subtype == "Fishing Pole" or item_subtype == "Miscellaneous" then
+					return
+				end
+				Hardcore:Print("Equipped " .. (item_name or "a forbidden weapon") .. ".")
+				pacifist_achievement.fail_function_executor.Fail(pacifist_achievement.name)
 			end
-			Hardcore:Print("Equiped " .. item_name .. ".")
-			pacifist_achievement.fail_function_executor.Fail(pacifist_achievement.name)
 		end
 	end
 end)

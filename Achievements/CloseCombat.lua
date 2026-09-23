@@ -31,12 +31,17 @@ close_combat_achievement:SetScript("OnEvent", function(self, event, ...)
 		if arg[2] == true then
 			return
 		end
+		
 		local item_id = GetInventoryItemID("player", arg[1])
-		local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
-		if item_type == "Weapon" then
-			if item_subtype == "Bows" or item_subtype == "Guns" or item_subtype == "Thrown" then
-				Hardcore:Print("Equiped " .. item_name .. ".")
-				close_combat_achievement.fail_function_executor.Fail(close_combat_achievement.name)
+		
+		-- Safely verify an item exists in the slot before querying item info
+		if item_id ~= nil then
+			local item_name, _, _, _, _, item_type, item_subtype = GetItemInfo(item_id)
+			if item_type == "Weapon" then
+				if item_subtype == "Bows" or item_subtype == "Guns" or item_subtype == "Thrown" then
+					Hardcore:Print("Equipped " .. (item_name or "a forbidden ranged weapon") .. ".")
+					close_combat_achievement.fail_function_executor.Fail(close_combat_achievement.name)
+				end
 			end
 		end
 	end

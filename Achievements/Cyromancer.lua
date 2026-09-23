@@ -27,12 +27,38 @@ end
 
 function cyromancer_achievement:GatherBlackList()
 	cyromancer_achievement.blacklist = {}
-	for i = 1, 4 do
-		local name, texture, offset, numSlots, isGuild, offspecID = GetSpellTabInfo(i)
-		if name == "Fire" or name == "Arcane" then
+	
+	local numTabs = 4
+	if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines then
+		numTabs = C_SpellBook.GetNumSpellBookSkillLines()
+	end
+
+	for i = 1, numTabs do
+		local name, offset, numSlots = nil, nil, nil
+		if C_SpellBook and C_SpellBook.GetSpellBookSkillLineInfo then
+			local info = C_SpellBook.GetSpellBookSkillLineInfo(i)
+			if info then
+				name = info.name
+				offset = info.itemIndexOffset
+				numSlots = info.numSpellBookItems
+			end
+		elseif GetSpellTabInfo then
+			local tName, _, tOffset, tSlots = GetSpellTabInfo(i)
+			name, offset, numSlots = tName, tOffset, tSlots
+		end
+
+		if (name == "Fire" or name == "Arcane") and offset and numSlots then
 			for j = offset + 1, offset + numSlots do
-				local spell_name = GetSpellInfo(j, "")
-				table.insert(cyromancer_achievement.blacklist, spell_name)
+				local spell_name = nil
+				if C_SpellBook and C_SpellBook.GetSpellBookItemName then
+					spell_name = C_SpellBook.GetSpellBookItemName(j, Enum.SpellBookSpellBank.Player)
+				elseif GetSpellInfo then
+					spell_name = GetSpellInfo(j, "")
+				end
+
+				if spell_name then
+					table.insert(cyromancer_achievement.blacklist, spell_name)
+				end
 			end
 		end
 	end
@@ -45,10 +71,13 @@ cyromancer_achievement:SetScript("OnEvent", function(self, event, ...)
 		cyromancer_achievement:GatherBlackList()
 	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
 		local unit, _, spell_id = ...
-		if unit ~= "player" then
+		if unit ~= "player" or not spell_id then
 			return
 		end
+		
 		local spell_name = GetSpellInfo(spell_id)
+		if not spell_name then return end -- Added Camelot nil safety
+		
 		for i, blacklist_spell in ipairs(cyromancer_achievement.blacklist) do
 			if spell_name == blacklist_spell then
 				cyromancer_achievement.fail_function_executor.Fail(cyromancer_achievement.name)

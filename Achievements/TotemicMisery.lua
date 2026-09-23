@@ -3,28 +3,11 @@ local totemic_misery_achievement = CreateFrame("Frame")
 _G.achievements.TotemicMisery = totemic_misery_achievement
 
 local blacklist_spells_named = {
-	"Windfury Totem",
-	"Tremor Totem",
-	"Grace of Air Totem",
-	"Mana Spring Totem",
-	"Tranquil Air Totem",
-	"Grounding Totem",
-	"Stoneskin Totem",
-	"Healing Stream Totem",
-	"Poison Cleansing Totem",
-	"Strength of Earth Totem",
-	"Flametongue Totem",
-	"Earthbind Totem",
-	"Fire Nova Totem",
-	"Magma Totem",
-	"Frost Resistance Totem",
-	"Windwall Totem",
-	"Searing Totem",
-	"Stoneclaw Totem",
-	"Disease Cleansing Totem",
-	"Nature Resistance Totem",
-	"Fire Resistance Totem",
-	"Nature Resistance Totem",
+	"Windfury Totem", "Tremor Totem", "Grace of Air Totem", "Mana Spring Totem", "Tranquil Air Totem",
+	"Grounding Totem", "Stoneskin Totem", "Healing Stream Totem", "Poison Cleansing Totem",
+	"Strength of Earth Totem", "Flametongue Totem", "Earthbind Totem", "Fire Nova Totem",
+	"Magma Totem", "Frost Resistance Totem", "Windwall Totem", "Searing Totem", "Stoneclaw Totem",
+	"Disease Cleansing Totem", "Nature Resistance Totem", "Fire Resistance Totem", "Nature Resistance Totem",
 }
 
 -- General info
@@ -49,15 +32,19 @@ end
 totemic_misery_achievement:SetScript("OnEvent", function(self, event, ...)
 	local arg = { ... }
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
-		local unit, _, spell_id, _, _ = ...
-		if unit ~= "player" then
+		local unit, _, spell_id = ...
+		if unit ~= "player" or not spell_id then
 			return
 		end
+		
+		local spell_name = GetSpellInfo(spell_id)
+		if not spell_name then return end
+		
 		for i, blacklist_spell_named in ipairs(blacklist_spells_named) do
-			local spell_name = GetSpellInfo(spell_id)
 			if spell_name == blacklist_spell_named then
-				Hardcore:Print("Casted totem spell." .. blacklist_spell_named)
+				Hardcore:Print("Casted totem spell: " .. blacklist_spell_named)
 				totemic_misery_achievement.fail_function_executor.Fail(totemic_misery_achievement.name)
+				return
 			end
 		end
 	end

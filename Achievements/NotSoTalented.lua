@@ -11,17 +11,26 @@ not_so_talented_achievement.icon_path = "Interface\\Addons\\Hardcore\\Media\\ico
 not_so_talented_achievement.description =
 	"Complete the Hardcore challenge without at any point applying a talent point. No talents are allowed."
 
+local function SafeToggleTalentFrame()
+	if ToggleTalentFrame then
+		ToggleTalentFrame()
+	elseif ToggleTalentUI then
+		ToggleTalentUI()
+	end
+end
+
 -- Registers
 function not_so_talented_achievement:Register(fail_function_executor)
 	not_so_talented_achievement:RegisterEvent("CHARACTER_POINTS_CHANGED")
 	not_so_talented_achievement.fail_function_executor = fail_function_executor
 
 	-- Talent frame might not exist before calling this function
-	ToggleTalentFrame()
-	if _G["PlayerTalentFrame"] then
-		_G["PlayerTalentFrame"]:SetScript("OnShow", function(self)
+	SafeToggleTalentFrame()
+	local talentFrame = _G["PlayerTalentFrame"] or _G["PlayerSpellsFrame"]
+	if talentFrame then
+		talentFrame:SetScript("OnShow", function(self)
 			Hardcore:Print("Hiding talent frame for Not So Talented.")
-			ToggleTalentFrame()
+			SafeToggleTalentFrame()
 		end)
 	end
 end

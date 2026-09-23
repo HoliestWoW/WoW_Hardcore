@@ -45,9 +45,9 @@ local function isMagePortal(...)
 	for i = 1, select("#", ...) do
 		local region = select(i, ...)
 		if region and region:GetObjectType() == "FontString" then
-			local text = region:GetText() -- string or nil
+			local text = region:GetText() 
 			if text ~= nil then
-				if string.find(text, "Portal to") ~= nil then -- e.g. "Portal to Stormwind"
+				if string.find(text, "Portal to") ~= nil then
 					return true
 				end
 			end
@@ -73,13 +73,16 @@ grounded_achievement:SetScript("OnEvent", function(self, event, ...)
 			return
 		end
 
-		local unit, _, spell_id, _, _ = ...
-		if unit ~= "player" then
+		local unit, _, spell_id = ...
+		if unit ~= "player" or not spell_id then
 			return
 		end
+		
 		local spell_name = GetSpellInfo(spell_id)
+		if not spell_name then return end -- Camelot nil safety
+		
 		if blacklist_spells_named[spell_name] ~= nil then
-			Hardcore:Print("Casted teleport spell" .. spell_name)
+			Hardcore:Print("Casted teleport spell " .. spell_name)
 			grounded_achievement.fail_function_executor.Fail(grounded_achievement.name)
 		end
 	elseif event == "CURSOR_CHANGED" then

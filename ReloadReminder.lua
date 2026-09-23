@@ -228,59 +228,29 @@ end
 -- advising a reload are met and putting out the advice
 
 function ReloadReminderCheck()
+    local rr_warn_interval = 0              
 
-    local rr_warn_interval = 0              -- Automatic or option-set time between a reload and a warning
+    if rr_show_warning == false or InCombatLockdown() == true then return end
+    if _G.Hardcore_Character == nil or _G.Hardcore_Character.time_played == nil or _G.Hardcore_Character.time_tracked == nil then return end
 
-    if rr_show_warning == false then
-        return
-    end
-
-    -- Check if in combat, suppress the warning if so
-    if InCombatLockdown() == true then
-        return
-    end
-
-    -- Do some fool proofing now so we don't have to keep doing that later
-    if _G.Hardcore_Character == nil or _G.Hardcore_Character.time_played == nil or _G.Hardcore_Character.time_tracked == nil then
-        return
-    end
-
-    -- Find out current time, so we can compare against the stored times
     local now = GetServerTime()
+    if now - rr_last_warning < RR_WARN_SUPPRESS then return end
 
-    -- Don't warn more often than once per minute
-    if now - rr_last_warning < RR_WARN_SUPPRESS then
-        return
-    end
-
-    -- Check if any of the tickers are falling behind; if so, warn immediately
-    if (now - rr_last_played_heartbeat > 180) or
-       (now - rr_last_track_heartbeat > 180) or
-       (now - rr_last_dung_heartbeat > 180) then
+    if (now - rr_last_track_heartbeat > 180) or (now - rr_last_dung_heartbeat > 180) then
         Hardcore:Print( "Detected a missing heartbeat -- a /reload is advised!")
         rr_last_warning = now
         ReloadReminderCreateWindow()
         return
     end
 
-    -- Determine what is a good time to advise a reload;
-    -- First determine how much tracked time was lost already
-    local rr_lost_time = _G.Hardcore_Character.time_played - _G.Hardcore_Character.time_tracked
-    if rr_lost_time < 0 then
-        rr_lost_time = 0
-    end
-
-    -- Now derive a good warning interval; 
+    local rr_lost_time = math.max(0, _G.Hardcore_Character.time_played - _G.Hardcore_Character.time_tracked)
     rr_warn_interval = ReloadReminderGetInterval(rr_lost_time)
 
-    -- Now see if the interval has passed already
     if now - rr_last_reload > rr_warn_interval then
-        -- Okay, let's output the warning
         Hardcore:Print( "Time for a /reload, interval = " .. ReloadReminderGetIntervalString( rr_warn_interval) )
         rr_last_warning = now
         ReloadReminderCreateWindow()
     end
-
 end
 
 -- ReloadReminderEnableWarning( should_show )

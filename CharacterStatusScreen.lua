@@ -15,180 +15,394 @@ local CLASS_COLOR_BY_NAME = {
 local AceGUI = LibStub("AceGUI-3.0")
 local ICON_SIZE = 39
 
--- Make the Reputation and Currency/Token tab smaller so we have room for "HC"
-_G["CharacterFrameTab3Text"]:SetText("Rep.")
-if	_G["TokenFrame"] ~= nil
-	and _G["CharacterFrameTab5Text"] ~= nil
-	and _G["CharacterFrameTab5Text"]:GetText() == "Currency"
-then
-	_G["CharacterFrameTab5Text"]:SetText("Curr.")
-end
+local Panel, f, f2, TabGUI
+local tab_gui_left, tab_gui_middle, tab_gui_right
+local inactive_tab_gui_left, inactive_tab_gui_middle, inactive_tab_gui_right
+local isModernUI, Hardcore_OldTitleText
 
-local Panel = CreateFrame("Frame", nil, CharacterFrame)
-Panel:SetPoint("CENTER", 0, 0)
-Panel:Hide()
+-- Safely initialize after login to prevent global file-load taint
+local initFrame = CreateFrame("Frame")
+initFrame:RegisterEvent("PLAYER_LOGIN")
+initFrame:SetScript("OnEvent", function()
+    -- Prevent duplicate initialization
+    if Panel then return end
 
--- Cata character frames are a bit higher and to the left for some weird reason
-local frameOffsetX, frameOffsetY
-if _G["HardcoreBuildLabel"] ~= "Cata" then
-	frameOffsetX = 2
-	frameOffsetY = -1
-else
-	frameOffsetX = -13
-	frameOffsetY = 13
-end
+    isModernUI = (_G["HardcoreBuildLabel"] == "Cata") or _G.HC_IS_CAMELOT or (CharacterFrame.NineSlice ~= nil)
 
--- Make a frame for the outside edges of the HC character frame
--- This is actually not necessary for Cata, where the only thing changed is the "Mixin",
--- i.e. the contents of the frame, not the edges
-local f
-if _G["HardcoreBuildLabel"] ~= "Cata" then
-	f = CreateFrame("Frame", "HardcoreOuterFrame", Panel)
-	f:SetFrameStrata("HIGH")
-	f:SetSize(400, 400)
-	f:SetPoint("CENTER")
-	f:Hide()
+    -- Anchor Panel to CharacterFrame for BOTH versions to fix Era layering
+    Panel = CreateFrame("Frame", nil, CharacterFrame)
+    Panel:Hide()
 
-	local t = f:CreateTexture(nil, "BACKGROUND")
-	t:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-TopLeft")
-	t:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX, frameOffsetY)
-	t:SetWidth(256)
-	t:SetHeight(256)
+    if not isModernUI then
+        -- CLASSIC ERA LOGIC
+        local frameOffsetX = 2
+        local frameOffsetY = -1
 
-	local tr = f:CreateTexture(nil, "BACKGROUND")
-	tr:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-TopRight")
-	tr:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX + 256, frameOffsetY)
-	tr:SetWidth(128)
-	tr:SetHeight(256)
+        Panel:SetPoint("CENTER", 0, 0)
+        Panel:SetAllPoints(CharacterFrame)
 
-	local bl = f:CreateTexture(nil, "BACKGROUND")
-	bl:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-BottomLeft")
-	bl:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX, frameOffsetY -256)
-	bl:SetWidth(256)
-	bl:SetHeight(256)
+        -- Shrink native tabs to make room for the HC tab
+        if _G["CharacterFrameTab3Text"] then _G["CharacterFrameTab3Text"]:SetText("Rep.") end
+        if _G["TokenFrame"] ~= nil and _G["CharacterFrameTab5Text"] ~= nil and _G["CharacterFrameTab5Text"]:GetText() == "Currency" then
+            _G["CharacterFrameTab5Text"]:SetText("Curr.")
+        end
 
-	local br = f:CreateTexture(nil, "BACKGROUND")
-	br:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-BottomRight")
-	br:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX + 256, frameOffsetY - 256)
-	br:SetWidth(128)
-	br:SetHeight(256)
+        f = CreateFrame("Frame", "HardcoreOuterFrame", Panel)
+        f:SetFrameStrata("HIGH")
+        f:SetSize(400, 400)
+        f:SetPoint("CENTER")
+        f:Hide()
 
-	local title_text = f:CreateFontString(nil, "ARTWORK")
-	title_text:SetFont("Interface\\Addons\\Hardcore\\Media\\BreatheFire.ttf", 22, "")
-	title_text:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX + 148, frameOffsetY - 44)
-	title_text:SetTextColor(1, 0.82, 0)
-	title_text:SetText("Hardcore")
-end
+        local t = f:CreateTexture(nil, "BACKGROUND")
+        t:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-TopLeft")
+        t:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX, frameOffsetY)
+        t:SetSize(256, 256)
 
-local f2 = AceGUI:Create("HardcoreFrameEmpty")
-f2:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX, frameOffsetY - 40)
-f2:SetWidth(360)
-f2:SetHeight(350)
-f2:Hide()
+        local tr = f:CreateTexture(nil, "BACKGROUND")
+        tr:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-TopRight")
+        tr:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX + 256, frameOffsetY)
+        tr:SetSize(128, 256)
 
-hooksecurefunc(CharacterFrame, "Hide", function(self, button)
-	HideCharacterHC()
-end)
+        local bl = f:CreateTexture(nil, "BACKGROUND")
+        bl:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-BottomLeft")
+        bl:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX, frameOffsetY - 256)
+        bl:SetSize(256, 256)
 
-local TabGUI = CreateFrame("Button", "CharacterFrameTab" .. (CharacterFrame.numTabs + 1), CharacterFrame)
-_G["HardcoreCharacterTab"] = TabGUI
+        local br = f:CreateTexture(nil, "BACKGROUND")
+        br:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-General-BottomRight")
+        br:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX + 256, frameOffsetY - 256)
+        br:SetSize(128, 256)
 
--- Cata tab buttons go down, while Classic buttons go up
-local buttonActiveOffset, buttonVertSizeActive, buttonVertSizeInactive
-if _G["HardcoreBuildLabel"] ~= "Cata" then
-	buttonActiveOffset = -5
-	buttonVertSizeActive = 32
-	buttonVertSizeInactive = 32
-else
-	buttonActiveOffset = -9
-	buttonVertSizeActive = 58
-	buttonVertSizeInactive = 32
-end
+        local title_text = f:CreateFontString(nil, "ARTWORK")
+        title_text:SetFont("Interface\\Addons\\Hardcore\\Media\\BreatheFire.ttf", 22, "")
+        title_text:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX + 148, frameOffsetY - 44)
+        title_text:SetTextColor(1, 0.82, 0)
+        title_text:SetText("Hardcore")
 
-TabGUI.text = TabGUI:CreateFontString(nil, "OVERLAY")
-TabGUI.text:SetDrawLayer("ARTWORK", 8)
-TabGUI.text:SetFontObject(GameFontNormalSmall)
-TabGUI.text:SetPoint("CENTER", 0, 1)
-TabGUI.text:SetText("HC")
+        TabGUI = CreateFrame("Button", "CharacterFrameTab" .. (CharacterFrame.numTabs + 1), CharacterFrame)
+        _G["HardcoreCharacterTab"] = TabGUI
 
-local tab_gui_left = TabGUI:CreateTexture()
-tab_gui_left:SetDrawLayer("ARTWORK", 1)
-tab_gui_left:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ActiveTab")
-tab_gui_left:SetSize(25, buttonVertSizeActive)
-tab_gui_left:SetRotation(3.14)
-tab_gui_left:SetTexCoord(0.8, 1.0, 1.0, 0.0)
-tab_gui_left:SetPoint("TOPLEFT", 0, buttonActiveOffset)
-local tab_gui_middle = TabGUI:CreateTexture(nil, "ARTWORK")
-tab_gui_middle:SetDrawLayer("ARTWORK", 1)
-tab_gui_middle:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ActiveTab")
-tab_gui_middle:SetSize(25, buttonVertSizeActive)
-tab_gui_middle:SetRotation(3.14)
-tab_gui_middle:SetTexCoord(0.8, 0.20, 1.0, 0.0)
-tab_gui_middle:SetPoint("TOP", 0, buttonActiveOffset)
-local tab_gui_right = TabGUI:CreateTexture(nil, "ARTWORK")
-tab_gui_right:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ActiveTab")
-tab_gui_right:SetSize(25, buttonVertSizeActive)
-tab_gui_right:SetRotation(3.14)
-tab_gui_right:SetTexCoord(0.0, 0.20, 1.0, 0.0)
-tab_gui_right:SetPoint("TOPRIGHT", 0, buttonActiveOffset)
-tab_gui_left:Hide()
-tab_gui_middle:Hide()
-tab_gui_right:Hide()
+        TabGUI.text = TabGUI:CreateFontString(nil, "OVERLAY")
+        TabGUI.text:SetDrawLayer("ARTWORK", 8)
+        TabGUI.text:SetFontObject(GameFontNormalSmall)
+        TabGUI.text:SetPoint("CENTER", 0, 1)
+        TabGUI.text:SetText("HC")
 
-local inactive_tab_gui_left = TabGUI:CreateTexture(nil, "ARTWORK")
-inactive_tab_gui_left:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-InactiveTab")
-inactive_tab_gui_left:SetSize(25, buttonVertSizeInactive)
-inactive_tab_gui_left:SetRotation(3.14)
-inactive_tab_gui_left:SetTexCoord(0.8, 1.0, 1.0, 0.0)
-inactive_tab_gui_left:SetPoint("TOPLEFT", 0, -9)
-local inactive_tab_gui_middle = TabGUI:CreateTexture(nil, "ARTWORK")
-inactive_tab_gui_middle:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-InactiveTab")
-inactive_tab_gui_middle:SetSize(25, buttonVertSizeInactive)
-inactive_tab_gui_middle:SetRotation(3.14)
-inactive_tab_gui_middle:SetTexCoord(0.8, 0.20, 1.0, 0.0)
-inactive_tab_gui_middle:SetPoint("TOP", 0, -9)
-local inactive_tab_gui_right = TabGUI:CreateTexture(nil, "ARTWORK")
-inactive_tab_gui_right:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-InactiveTab")
-inactive_tab_gui_right:SetSize(25, buttonVertSizeInactive)
-inactive_tab_gui_right:SetRotation(3.14)
-inactive_tab_gui_right:SetTexCoord(0.0, 0.20, 1.0, 0.0)
-inactive_tab_gui_right:SetPoint("TOPRIGHT", 0, -9)
+        local buttonActiveOffset = -5
+        local buttonVertSizeActive = 32
+        local buttonVertSizeInactive = 32
 
-local tab_higlight = TabGUI:CreateTexture(nil, "OVERLAY")
-tab_higlight:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-Tab-RealHighlight")
-tab_higlight:SetSize(46, 43)
-tab_higlight:SetRotation(3.14)
-tab_higlight:SetTexCoord(1.0, 0.0, 1.0, 0.0)
-tab_higlight:SetPoint("TOP", 0, 0)
-TabGUI:SetHighlightTexture(tab_higlight, "ADD")
-TabGUI:SetWidth(60)
-TabGUI:SetHeight(50)
-TabGUI:Show()
+        tab_gui_left = TabGUI:CreateTexture()
+        tab_gui_left:SetDrawLayer("ARTWORK", 1)
+        tab_gui_left:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ActiveTab")
+        tab_gui_left:SetSize(25, buttonVertSizeActive)
+        tab_gui_left:SetRotation(3.14)
+        tab_gui_left:SetTexCoord(0.8, 1.0, 1.0, 0.0)
+        tab_gui_left:SetPoint("TOPLEFT", 0, buttonActiveOffset)
 
-hooksecurefunc(CharacterFrame, "Show", function(self, button)
+        tab_gui_middle = TabGUI:CreateTexture(nil, "ARTWORK")
+        tab_gui_middle:SetDrawLayer("ARTWORK", 1)
+        tab_gui_middle:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ActiveTab")
+        tab_gui_middle:SetSize(25, buttonVertSizeActive)
+        tab_gui_middle:SetRotation(3.14)
+        tab_gui_middle:SetTexCoord(0.8, 0.20, 1.0, 0.0)
+        tab_gui_middle:SetPoint("TOP", 0, buttonActiveOffset)
 
-	-- In different game versions, tabs 1-5 are used in different combinations
-	-- We put the HC tab next to the last actually used tab, but anchor it to the CharacterFrame
-	-- rather than that tab to prevent it from jumping up/down along with the other tab.
-	local rightMostVisible = "CharacterFrameTab1Text"
-	for i = 2, 5 do
-		local tabLabel = "CharacterFrameTab" .. i .. "Text"
-		if _G[tabLabel] ~= nil and _G[tabLabel]:IsVisible() then
-			rightMostVisible = tabLabel
-		end
-	end
-	local x = _G[rightMostVisible]:GetRight() - _G["CharacterFrame"]:GetLeft()
-	local y = _G[rightMostVisible]:GetTop() - _G["CharacterFrame"]:GetTop()
-	if _G["HardcoreBuildLabel"] ~= "Cata" then
-		TabGUI:SetPoint("TOPLEFT", CharacterFrame, x+4, y+19)
-	else
-		TabGUI:SetPoint("TOPLEFT", CharacterFrame, x+10, y+17)
-	end
-	TabGUI:Show()
-end)
+        tab_gui_right = TabGUI:CreateTexture(nil, "ARTWORK")
+        tab_gui_right:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ActiveTab")
+        tab_gui_right:SetSize(25, buttonVertSizeActive)
+        tab_gui_right:SetRotation(3.14)
+        tab_gui_right:SetTexCoord(0.0, 0.20, 1.0, 0.0)
+        tab_gui_right:SetPoint("TOPRIGHT", 0, buttonActiveOffset)
 
-hooksecurefunc(CharacterFrame, "Hide", function(self, button)
-	TabGUI:Hide()
+        tab_gui_left:Hide()
+        tab_gui_middle:Hide()
+        tab_gui_right:Hide()
+
+        inactive_tab_gui_left = TabGUI:CreateTexture(nil, "ARTWORK")
+        inactive_tab_gui_left:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-InactiveTab")
+        inactive_tab_gui_left:SetSize(25, buttonVertSizeInactive)
+        inactive_tab_gui_left:SetRotation(3.14)
+        inactive_tab_gui_left:SetTexCoord(0.8, 1.0, 1.0, 0.0)
+        inactive_tab_gui_left:SetPoint("TOPLEFT", 0, -9)
+
+        inactive_tab_gui_middle = TabGUI:CreateTexture(nil, "ARTWORK")
+        inactive_tab_gui_middle:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-InactiveTab")
+        inactive_tab_gui_middle:SetSize(25, buttonVertSizeInactive)
+        inactive_tab_gui_middle:SetRotation(3.14)
+        inactive_tab_gui_middle:SetTexCoord(0.8, 0.20, 1.0, 0.0)
+        inactive_tab_gui_middle:SetPoint("TOP", 0, -9)
+
+        inactive_tab_gui_right = TabGUI:CreateTexture(nil, "ARTWORK")
+        inactive_tab_gui_right:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-InactiveTab")
+        inactive_tab_gui_right:SetSize(25, buttonVertSizeInactive)
+        inactive_tab_gui_right:SetRotation(3.14)
+        inactive_tab_gui_right:SetTexCoord(0.0, 0.20, 1.0, 0.0)
+        inactive_tab_gui_right:SetPoint("TOPRIGHT", 0, -9)
+
+        local tab_higlight = TabGUI:CreateTexture(nil, "OVERLAY")
+        tab_higlight:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-Tab-RealHighlight")
+        tab_higlight:SetSize(46, 43)
+        tab_higlight:SetRotation(3.14)
+        tab_higlight:SetTexCoord(1.0, 0.0, 1.0, 0.0)
+        tab_higlight:SetPoint("TOP", 0, 0)
+        TabGUI:SetHighlightTexture(tab_higlight, "ADD")
+        TabGUI:SetWidth(60)
+        TabGUI:SetHeight(50)
+        TabGUI:Show()
+
+        hooksecurefunc(CharacterFrame, "Show", function()
+            local rightMostVisible = "CharacterFrameTab1Text"
+            for i = 2, 5 do
+                local tabLabel = "CharacterFrameTab" .. i .. "Text"
+                if _G[tabLabel] ~= nil and _G[tabLabel]:IsVisible() then
+                    rightMostVisible = tabLabel
+                end
+            end
+            local x = _G[rightMostVisible]:GetRight() - _G["CharacterFrame"]:GetLeft()
+            local y = _G[rightMostVisible]:GetTop() - _G["CharacterFrame"]:GetTop()
+            TabGUI:SetPoint("TOPLEFT", CharacterFrame, x+4, y+19)
+            TabGUI:Show()
+        end)
+
+        hooksecurefunc(CharacterFrame, "Hide", function()
+            TabGUI:Hide()
+        end)
+
+    else
+        -- MODERN CAMELOT UI SETUP
+        Panel:SetAllPoints(CharacterFrame)
+
+        Panel.LeftInset = CreateFrame("Frame", nil, _G.CharacterFrameLeftPaneHost or Panel)
+        Panel.LeftInset:SetAllPoints()
+        Panel.LeftInset:SetFrameLevel((_G.CharacterFrameLeftPaneHost and _G.CharacterFrameLeftPaneHost:GetFrameLevel() or 1) + 20)
+        Panel.LeftInset:EnableMouse(true)
+        Panel.LeftInset:Hide()
+
+        local leftBg = Panel.LeftInset:CreateTexture(nil, "BACKGROUND")
+        leftBg:SetAllPoints()
+        leftBg:SetColorTexture(0.06, 0.06, 0.06, 1.0)
+
+        Panel.RightInset = CreateFrame("Frame", nil, _G.CharacterFrameRightPaneHost or Panel)
+        Panel.RightInset:SetAllPoints()
+        Panel.RightInset:SetFrameLevel((_G.CharacterFrameRightPaneHost and _G.CharacterFrameRightPaneHost:GetFrameLevel() or 1) + 20)
+        Panel.RightInset:SetClipsChildren(true)
+        Panel.RightInset:EnableMouse(true)
+        Panel.RightInset:Hide()
+
+        local rightBg = Panel.RightInset:CreateTexture(nil, "BACKGROUND")
+        rightBg:SetAllPoints()
+        rightBg:SetColorTexture(0.06, 0.06, 0.06, 1.0)
+
+        local emblem = Panel.RightInset:CreateTexture(nil, "ARTWORK")
+        emblem:SetSize(128, 128)
+        emblem:SetPoint("CENTER", 0, 20)
+        emblem:SetTexture("Interface\\AddOns\\Hardcore\\Media\\wowhc-emblem-white-red.blp")
+
+        local title = Panel.RightInset:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+        title:SetPoint("TOP", emblem, "BOTTOM", 0, -10)
+        title:SetText("Hardcore")
+
+        local baseTab
+        for i = 10, 1, -1 do
+            if _G["CharacterFrameModeTab"..i] then
+                baseTab = _G["CharacterFrameModeTab"..i]
+                break
+            end
+        end
+
+        if baseTab then
+            TabGUI = CreateFrame("Button", "HardcoreCharacterTab", baseTab:GetParent())
+            local w, h = baseTab:GetSize()
+            TabGUI:SetSize((w and w > 0) and w or 32, (h and h > 0) and h or 32)
+            TabGUI:SetPoint("TOPLEFT", baseTab, "BOTTOMLEFT", 0, 0)
+
+            TabGUI.Icon = TabGUI:CreateTexture(nil, "ARTWORK")
+            TabGUI.Icon:SetPoint("TOPLEFT", TabGUI, "TOPLEFT", 3, -7)
+            TabGUI.Icon:SetPoint("BOTTOMRIGHT", TabGUI, "BOTTOMRIGHT", -11, 7)
+            TabGUI.Icon:SetTexture("Interface\\AddOns\\Hardcore\\Media\\logo-emblem.blp")
+
+            for _, region in ipairs({baseTab:GetRegions()}) do
+                if region:IsObjectType("Texture") then
+                    local atlas = region:GetAtlas()
+                    if atlas == "common-sidetab" then
+                        if not TabGUI.Background then
+                            TabGUI.Background = TabGUI:CreateTexture(nil, "BACKGROUND")
+                            TabGUI.Background:SetAllPoints()
+                            TabGUI.Background:SetAtlas(atlas)
+                        end
+                    elseif atlas == "common-sidetab-selected" then
+                        if not TabGUI.TabGlow then
+                            TabGUI.TabGlow = TabGUI:CreateTexture(nil, "OVERLAY")
+                            TabGUI.TabGlow:SetAllPoints()
+                            TabGUI.TabGlow:SetAtlas(atlas)
+                            TabGUI.TabGlow:SetBlendMode("ADD")
+                            TabGUI.TabGlow:Hide()
+                        end
+                    elseif atlas == "common-sidetab-hover" then
+                        if not TabGUI.HighlightTexture then
+                            TabGUI.HighlightTexture = TabGUI:CreateTexture(nil, "HIGHLIGHT")
+                            TabGUI.HighlightTexture:SetAllPoints()
+                            TabGUI.HighlightTexture:SetAtlas(atlas)
+                            TabGUI.HighlightTexture:SetBlendMode("ADD")
+                            TabGUI.HighlightTexture:Hide()
+                        end
+                    end
+                end
+            end
+
+            TabGUI:SetScript("OnEnter", function(self) 
+                if self.HighlightTexture then self.HighlightTexture:Show() end 
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText("Hardcore", 1, 0.82, 0)
+                GameTooltip:Show()
+            end)
+            
+            TabGUI:SetScript("OnLeave", function(self) 
+                if self.HighlightTexture then self.HighlightTexture:Hide() end 
+                GameTooltip:Hide()
+            end)
+        else
+            TabGUI = CreateFrame("Button", "HardcoreCharacterTab", CharacterFrame, "UIPanelButtonTemplate")
+            TabGUI:SetSize(60, 22)
+            TabGUI:SetPoint("TOPRIGHT", CharacterFrame, "TOPRIGHT", -40, -40)
+            TabGUI:SetText("HC")
+        end
+        TabGUI:Show()
+    end
+
+    f2 = AceGUI:Create("HardcoreFrameEmpty")
+    if isModernUI then
+        f2.frame:SetParent(Panel.LeftInset)
+        f2.frame:ClearAllPoints()
+        f2.frame:SetPoint("TOPLEFT", Panel.LeftInset, "TOPLEFT", 5, -5)
+    else
+        -- CLASSIC ERA LOGIC
+        local frameOffsetX = 2
+        local frameOffsetY = -1
+        f2:SetPoint("TOPLEFT", CharacterFrame, "TOPLEFT", frameOffsetX, frameOffsetY - 40)
+        f2:SetWidth(360)
+        f2:SetHeight(350)
+    end
+    f2:Hide()
+
+    TabGUI:SetScript("OnClick", function(self)
+        if not isModernUI then
+            for i = 1, 5 do
+                if _G["CharacterFrameTab"..i] then
+                    PanelTemplates_DeselectTab(_G["CharacterFrameTab"..i])
+                end
+            end
+            CharacterFrame.activeTab = 6
+
+            local nativePanels = {
+                "PaperDollFrame", 
+                "PetPaperDollFrame",
+                "HonorFrame",
+                "SkillFrame",
+                "ReputationFrame",
+                "TokenFrame"
+            }
+            for _, panelName in ipairs(nativePanels) do
+                if _G[panelName] then
+                    _G[panelName]:Hide()
+                end
+            end
+        else
+            if self.TabGlow then
+                self.TabGlow:Show()
+                for i = 1, 10 do
+                    local tab = _G["CharacterFrameModeTab"..i] or _G["CharacterFrameTab"..i]
+                    if tab then
+                        local nativeGlow = tab.TabGlow or tab.SelectedTexture
+                        if nativeGlow then nativeGlow:Hide() end
+                        for _, region in ipairs({tab:GetRegions()}) do
+                            if region:IsObjectType("Texture") then
+                                local atlas = region:GetAtlas()
+                                if atlas and (atlas:find("selected") or atlas:find("Glow")) then
+                                    region:Hide()
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            local nativePanels = { 
+                "PaperDollFrame", 
+                "ReputationFrame", 
+                "SkillsFrame", 
+                "PVPRankFrame", 
+                "TokenFrame",
+                "PetPaperDollFrame",
+                "StatisticsFrame",
+                "CharacterStatsPane",
+                "HonorFrame",
+                "SkillFrame"
+            }
+            for _, panelName in ipairs(nativePanels) do
+                if _G[panelName] then
+                    _G[panelName]:Hide()
+                end
+            end
+        end
+
+        ShowCharacterHC(Hardcore_Character)
+    end)
+
+    if isModernUI then
+        for i = 1, 10 do
+            local tab = _G["CharacterFrameModeTab"..i] or _G["CharacterFrameTab"..i]
+            if tab then
+                pcall(function()
+                    tab:HookScript("OnClick", function()
+                        if TabGUI and TabGUI.TabGlow then
+                            TabGUI.TabGlow:Hide()
+                        end
+                        for _, region in ipairs({tab:GetRegions()}) do
+                            if region:IsObjectType("Texture") then
+                                local atlas = region:GetAtlas()
+                                if atlas and (atlas:find("selected") or atlas:find("Glow")) then
+                                    region:Show()
+                                end
+                            end
+                        end
+                    end)
+                end)
+            end
+        end
+    end
+
+    TabGUI:RegisterEvent("PLAYER_ENTER_COMBAT")
+    TabGUI:RegisterEvent("PLAYER_LEAVE_COMBAT")
+    TabGUI:SetScript("OnEvent", function(self, event, ...)
+        if event == "PLAYER_ENTER_COMBAT" then
+            if not isModernUI and TabGUI.text then
+                TabGUI.text:SetText("|c00808080HC|r")
+            end
+            HideCharacterHC()
+            TabGUI:Disable()
+        elseif event == "PLAYER_LEAVE_COMBAT" then
+            if not isModernUI and TabGUI.text then
+                TabGUI.text:SetText("HC")
+            end
+            TabGUI:Enable()
+        end
+    end)
+
+    hooksecurefunc(CharacterFrame, "Hide", function(self)
+        HideCharacterHC()
+    end)
+
+    if not isModernUI then
+        hooksecurefunc("PanelTemplates_SetTab", function(frame, id)
+            if frame == CharacterFrame and id and id ~= 6 then
+                if Panel and Panel:IsShown() then
+                    HideCharacterHC()
+                end
+            end
+        end)
+    end
 end)
 
 function extractDetails(str, ignoreKeys)
@@ -196,8 +410,6 @@ function extractDetails(str, ignoreKeys)
 	str = str:gsub("^%s*%((.+)%)%s*$", "%1")
 	local details_table = {}
 	for key, value in str:gmatch("(%S+)=(%S+)") do
-		Hardcore:Debug("extractDetails: " .. key .. " = " .. value)
-	  -- Check if the current key is in the ignoreKeys array
 		local ignore = false
 		for _, ignoreKey in ipairs(ignoreKeys or {}) do
 			if key == ignoreKey then
@@ -205,12 +417,10 @@ function extractDetails(str, ignoreKeys)
 				break
 			end
 		end
-		-- Store the key-value pair in the details table if it's not being ignored
 		if not ignore then
-		details_table[key] = value
+			details_table[key] = value
 		end
 	end
-  
 	return details_table
 end
 
@@ -219,22 +429,12 @@ function formatDetails(details_table)
 	for key, value in pairs(details_table) do
 	  str = str .. key .. " = " .. value .. ", "
 	end
-	return str:sub(1, -3) -- Remove the trailing space before returning
-  end
+	return str:sub(1, -3)
+end
 
-function UpdateCharacterHC(
-	_hardcore_character,
-	_player_name,
-	_version,
-	frame_to_update,
-	_player_class,
-	_player_class_en,
-	_player_level
-)
+function UpdateCharacterHC(_hardcore_character, _player_name, _version, frame_to_update, _player_class, _player_class_en, _player_level)
 	frame_to_update:ReleaseChildren()
-	if _hardcore_character == nil then
-		return
-	end
+	if _hardcore_character == nil then return end
 
 	local character_meta_data_container = AceGUI:Create("SimpleGroup")
 	character_meta_data_container:SetRelativeWidth(1.0)
@@ -312,19 +512,14 @@ function UpdateCharacterHC(
 	version_name:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
 	character_meta_data_container:AddChild(version_name)
 
-	-- SET UP FILTERING
 	local filtered_status = _hardcore_character.verification_status
 	local filtered_details = _hardcore_character.verification_details
 
-	--Hardcore:Print("Status: ".. _hardcore_character.verification_status)
-
 	if _player_name ~= UnitName("player") then
-		-- Remove tracked_time and deaths entries
 		local ignoreKeys = {"tracked_time", "deaths", "appeals", "repeat_dung", "overlvl_dung"}
 		local details_table = extractDetails(_hardcore_character.verification_details, ignoreKeys)
 		filtered_details = formatDetails(details_table)
 
-		-- filtered details now only contains offenses that aren't tracked time or deaths, or is empty
 		if filtered_details == "" and _hardcore_character.verification_status == "PASS" then
 			filtered_status = "|cff1eff0cPASS|r"
 		elseif filtered_details == "" and _hardcore_character.verification_status == "FAIL" then
@@ -340,8 +535,7 @@ function UpdateCharacterHC(
 		local hc_tag_f = AceGUI:Create("HardcoreClassTitleLabel")
 		hc_tag_f:SetRelativeWidth(1.0)
 		hc_tag_f:SetHeight(60)
-		local hc_tag_string = _hardcore_character.hardcore_player_name
-		hc_tag_f:SetText("HC Tag: " .. hc_tag_string)
+		hc_tag_f:SetText("HC Tag: " .. _hardcore_character.hardcore_player_name)
 		hc_tag_f:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
 		character_meta_data_container:AddChild(hc_tag_f)
 	end
@@ -374,11 +568,7 @@ function UpdateCharacterHC(
 	hc_tag_h:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
 	character_meta_data_container:AddChild(hc_tag_h)
 	
-	local explanatory_key_msg = ""
-	.. "\n\nWhat does this mean?\n"
-	.. "|cff1eff0cPASS|r - Valid HC Character, Dungeon-legal\n"
-	.. "|cffff8000PENDING|r - Death or data appeal in progress\n"
-	.. "|cffff3f40FAIL|r - Has failed the challenge - INVALID CHARACTER\n"
+	local explanatory_key_msg = "\n\nWhat does this mean?\n|cff1eff0cPASS|r - Valid HC Character, Dungeon-legal\n|cffff8000PENDING|r - Death or data appeal in progress\n|cffff3f40FAIL|r - Has failed the challenge - INVALID CHARACTER\n"
 	
 	local hc_tag_i = AceGUI:Create("HardcoreClassTitleLabel")
 	hc_tag_i:SetRelativeWidth(1.0)
@@ -407,22 +597,19 @@ function UpdateCharacterHC(
 	achievements_title:SetFont("Interface\\Addons\\Hardcore\\Media\\BreatheFire.ttf", 16, "")
 	achievements_container:AddChild(achievements_title)
 
-	-- Some padding on the left of the icons (so that there is 5% space left and right)
 	local padding = AceGUI:Create("Label")
 	padding:SetRelativeWidth(0.05)
 	padding:SetHeight(30)
 	achievements_container:AddChild(padding)
 
-	-- Put achievements in a scroll container in case there are too many achievements
 	local scroll_container = AceGUI:Create("SimpleGroup")
 	scroll_container:SetRelativeWidth(0.9)
 	scroll_container:SetHeight(100)
 	scroll_container:SetLayout("Fill")
 	achievements_container:AddChild(scroll_container)
 
-	-- Add the scrolling part of the frame
 	local scroll_frame = AceGUI:Create("ScrollFrame")
-	scroll_frame:SetLayout("Flow") -- We want the headers and columns side by side
+	scroll_frame:SetLayout("Flow")
 	scroll_frame:SetFullWidth(true)
 	scroll_frame:SetFullHeight(true)
 	scroll_container:AddChild(scroll_frame)
@@ -459,124 +646,81 @@ function UpdateCharacterHC(
 end
 
 function ShowCharacterHC(_hardcore_character)
-	tab_gui_left:Show()
-	tab_gui_middle:Show()
-	tab_gui_right:Show()
-	inactive_tab_gui_left:Hide()
-	inactive_tab_gui_middle:Hide()
-	inactive_tab_gui_right:Hide()
-	TabGUI.text:SetFontObject(GameFontHighlightSmall)
-	if _G["HardcoreBuildLabel"] ~= "Cata" then
-		TabGUI.text:SetPoint("CENTER", 0, 3)
-	else
-		TabGUI.text:SetPoint("CENTER", 0, -1)
-	end
-	TabGUI:SetFrameStrata("HIGH")
+    if not isModernUI and tab_gui_left then
+        tab_gui_left:Show()
+        tab_gui_middle:Show()
+        tab_gui_right:Show()
+        inactive_tab_gui_left:Hide()
+        inactive_tab_gui_middle:Hide()
+        inactive_tab_gui_right:Hide()
+        TabGUI.text:SetFontObject(GameFontHighlightSmall)
+        TabGUI.text:SetPoint("CENTER", 0, 3)
+        TabGUI:SetFrameStrata("HIGH")
+        TabGUI:Disable()
+    end
 
-	f2:ReleaseChildren()
+    f2:ReleaseChildren()
+    local class, class_en, _ = UnitClass("player")
+    
+    if isModernUI then
+        f2:SetWidth(Panel.LeftInset:GetWidth() - 10)
+        f2:SetHeight(Panel.LeftInset:GetHeight() - 10)
 
-	local class, class_en, _ = UnitClass("player")
-	UpdateCharacterHC(
-		_hardcore_character,
-		UnitName("player"),
-		C_AddOns.GetAddOnMetadata("Hardcore", "Version"),
-		f2,
-		class,
-		class_en,
-		UnitLevel("player")
-	)
-	Panel:Show()
-	if _G["HardcoreBuildLabel"] ~= "Cata" then
-		f:Show()
-	end
-	f2:Show()
+        if _G.CharacterFrameTitleText then
+            Hardcore_OldTitleText = _G.CharacterFrameTitleText:GetText()
+            _G.CharacterFrameTitleText:SetText("Hardcore")
+        end
+        
+        if Panel.LeftInset then Panel.LeftInset:Show() end
+        if Panel.RightInset then Panel.RightInset:Show() end
+    end
+
+    UpdateCharacterHC(
+        _hardcore_character,
+        UnitName("player"),
+        (C_AddOns and C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata)("Hardcore", "Version"),
+        f2,
+        class,
+        class_en,
+        UnitLevel("player")
+    )
+    
+    Panel:Show()
+    if f and not isModernUI then f:Show() end
+    f2:Show()
 end
 
 function HideCharacterHC()
-	tab_gui_left:Hide()
-	tab_gui_middle:Hide()
-	tab_gui_right:Hide()
-	inactive_tab_gui_left:Show()
-	inactive_tab_gui_middle:Show()
-	inactive_tab_gui_right:Show()
-	TabGUI.text:SetFontObject(GameFontNormalSmall)
-	TabGUI.text:SetPoint("CENTER", 0, 1)
-	TabGUI:SetFrameStrata("HIGH")
-	Panel:Hide()
-	if _G["HardcoreBuildLabel"] ~= "Cata" then
-		f:Hide()
-	end
-	f2:Hide()
-	f2:ReleaseChildren()
+    if not isModernUI and tab_gui_left then
+        tab_gui_left:Hide()
+        tab_gui_middle:Hide()
+        tab_gui_right:Hide()
+        inactive_tab_gui_left:Show()
+        inactive_tab_gui_middle:Show()
+        inactive_tab_gui_right:Show()
+        TabGUI.text:SetFontObject(GameFontNormalSmall)
+        TabGUI.text:SetPoint("CENTER", 0, 1)
+        TabGUI:SetFrameStrata("MEDIUM")
+        TabGUI:Enable()
+    end
+
+    if TabGUI and TabGUI.TabGlow then
+        TabGUI.TabGlow:Hide()
+    end
+
+    if Panel then Panel:Hide() end
+    if f then f:Hide() end
+    if f2 then
+        f2:Hide()
+        f2:ReleaseChildren()
+    end
+
+    if isModernUI then
+        if _G.CharacterFrameTitleText and Hardcore_OldTitleText then
+            _G.CharacterFrameTitleText:SetText(Hardcore_OldTitleText)
+        end
+        
+        if Panel.LeftInset then Panel.LeftInset:Hide() end
+        if Panel.RightInset then Panel.RightInset:Hide() end
+    end
 end
-
-TabGUI:RegisterEvent("PLAYER_ENTER_COMBAT")
-TabGUI:RegisterEvent("PLAYER_LEAVE_COMBAT")
-
-TabGUI:SetScript("OnClick", function(self, arg1)
-
-	-- For Cata, we need to switch to the first tab first, so as to change the character frame size
-	-- back to normal
-	if _G["HardcoreBuildLabel"] == "Cata" then
-		CharacterFrame:ShowSubFrame("PaperDollFrame")
-		ShowUIPanel(CharacterFrame)
-		CharacterFrame:RefreshDisplay()
-	end
-
-	PanelTemplates_SetTab(CharacterFrame, 6)
-	if _G["PaperDollFrame"] ~= nil then
-		_G["PaperDollFrame"]:Hide()
-	end
-	if _G["PetPaperDollFrame"] ~= nil then
-		_G["PetPaperDollFrame"]:Hide()
-	end
-	if _G["HonorFrame"] ~= nil then
-		_G["HonorFrame"]:Hide()
-	end
-	if _G["SkillFrame"] ~= nil then
-		_G["SkillFrame"]:Hide()
-	end
-	if _G["ReputationFrame"] ~= nil then
-		_G["ReputationFrame"]:Hide()
-	end
-	if _G["TokenFrame"] ~= nil then
-		_G["TokenFrame"]:Hide()
-	end
-	ShowCharacterHC(Hardcore_Character)
-end)
-
-TabGUI:SetScript("OnEvent", function(self, event, ...)
-	local arg = { ... }
-	if event == "PLAYER_ENTER_COMBAT" then
-		TabGUI.text:SetText("|c00808080HC|r")
-		HideCharacterHC()
-		TabGUI:SetScript("OnClick", function(self, arg1) end)
-	elseif event == "PLAYER_LEAVE_COMBAT" then
-		TabGUI.text:SetText("HC")
-		TabGUI:SetScript("OnClick", function(self, arg1)
-			PanelTemplates_SetTab(CharacterFrame, 6)
-			if _G["HonorFrame"] ~= nil then
-				_G["HonorFrame"]:Hide()
-			end
-			if _G["PaperDollFrame"] ~= nil then
-				_G["PaperDollFrame"]:Hide()
-			end
-			if _G["PetPaperDollFrame"] ~= nil then
-				_G["PetPaperDollFrame"]:Hide()
-			end
-			if _G["HonorFrame"] ~= nil then
-				_G["HonorFrame"]:Hide()
-			end
-			if _G["SkillFrame"] ~= nil then
-				_G["SkillFrame"]:Hide()
-			end
-			if _G["ReputationFrame"] ~= nil then
-				_G["ReputationFrame"]:Hide()
-			end
-			if _G["TokenFrame"] ~= nil then
-				_G["TokenFrame"]:Hide()
-			end
-			ShowCharacterHC(Hardcore_Character)
-		end)
-	end
-end)

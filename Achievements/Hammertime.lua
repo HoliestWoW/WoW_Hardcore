@@ -30,23 +30,25 @@ hammertime_achievement:SetScript("OnEvent", function(self, event, ...)
 			return
 		end
 		local item_id = GetInventoryItemID("player", arg[1])
-		local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
-		if arg[1] == 16 then -- Mainhand
-			-- Checks if the mainhand is of type weapon, then checks to make sure it is not of Fishing Poles type and not of Two Handed Maces type,
-			-- If it passes those checks the player fails.
-			if item_type == "Weapon" then
-				if item_subtype == "Fishing Poles" or item_subtype == "Fishing Pole" then
-					return
-				else
-					if item_subtype ~= "Two-Handed Maces" then
-						Hardcore:Print("Equiped " .. item_name .. ".")
-						hammertime_achievement.fail_function_executor.Fail(hammertime_achievement.name)
+		
+		-- Safely verify an item exists before querying info
+		if item_id ~= nil then
+			local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
+			if arg[1] == 16 then -- Mainhand
+				if item_type == "Weapon" then
+					if item_subtype == "Fishing Poles" or item_subtype == "Fishing Pole" then
+						return
+					else
+						if item_subtype ~= "Two-Handed Maces" then
+							Hardcore:Print("Equipped " .. (item_name or "a forbidden weapon") .. ".")
+							hammertime_achievement.fail_function_executor.Fail(hammertime_achievement.name)
+						end
 					end
 				end
+			elseif arg[1] == 17 then -- Offhand
+				Hardcore:Print("Equipped " .. (item_name or "a forbidden offhand") .. ".")
+				hammertime_achievement.fail_function_executor.Fail(hammertime_achievement.name)
 			end
-		elseif arg[1] == 17 then -- Offhand
-			Hardcore:Print("Equipped " .. item_name .. ".")
-			hammertime_achievement.fail_function_executor.Fail(hammertime_achievement.name)
 		end
 	end
 end)

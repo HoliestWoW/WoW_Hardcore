@@ -31,46 +31,60 @@ sword_and_board_achievement:SetScript("OnEvent", function(self, event, ...)
 			return
 		end
 		local item_id = GetInventoryItemID("player", arg[1])
-		local item_name, _, _, _, _, item_type, item_subtype, _, _, _, _ = GetItemInfo(item_id)
-		if arg[1] == 16 then -- Mainhand
-			if item_type == "Weapon" then
-				if
-					item_subtype == "Two-Handed Axes"
-					or item_subtype == "Two-Handed Maces"
-					or item_subtype == "Two-Handed Swords"
-					or item_subtype == "Polearms"
-					or item_subtype == "Staves"
-					--or item_subtype == "Fishing Poles"
-				then
-					local time_elapsed = 0 -- seconds
-					C_Timer.NewTicker(1, function(self)
-						time_elapsed = time_elapsed + 1
-						Hardcore:Print(
-							"<Sword and Board>: Unequip non sword or shield item, "
-								.. item_name
-								.. ", or your achievement will fail in "
-								.. 60 - time_elapsed
-								.. " seconds."
-						)
-						if IsEquippedItem(item_id) == false then
+		
+		-- FIX: Safely verify the item exists before parsing
+		if item_id ~= nil then
+			local item_name, _, _, _, _, item_type, item_subtype = GetItemInfo(item_id)
+			if arg[1] == 16 then -- Mainhand
+				if item_type == "Weapon" then
+					if
+						item_subtype == "Two-Handed Axes"
+						or item_subtype == "Two-Handed Maces"
+						or item_subtype == "Two-Handed Swords"
+						or item_subtype == "Polearms"
+						or item_subtype == "Staves"
+					then
+						local time_elapsed = 0 -- seconds
+						C_Timer.NewTicker(1, function(self)
+							time_elapsed = time_elapsed + 1
 							Hardcore:Print(
-								"<Sword and Board>: You unequipped " .. item_name .. ". No further action needed."
+								"<Sword and Board>: Unequip non sword or shield item, "
+									.. (item_name or "the forbidden weapon")
+									.. ", or your achievement will fail in "
+									.. 60 - time_elapsed
+									.. " seconds."
 							)
-							self:Cancel()
-							return
-						end
-						if time_elapsed > 60 then
-							Hardcore:Print("Equipped " .. item_name .. ".")
-							sword_and_board_achievement.fail_function_executor.Fail(sword_and_board_achievement.name)
-							self:Cancel()
-						end
-					end)
+							
+							-- FIX: Safe manual 1-19 slot check instead of deprecated IsEquippedItem
+							local still_equipped = false
+							for i = 1, 19 do
+								if GetInventoryItemID("player", i) == item_id then
+									still_equipped = true
+									break
+								end
+							end
+							
+							if not still_equipped then
+								Hardcore:Print(
+									"<Sword and Board>: You unequipped " .. (item_name or "the weapon") .. ". No further action needed."
+								)
+								self:Cancel()
+								return
+							end
+							
+							if time_elapsed > 60 then
+								Hardcore:Print("Equipped " .. (item_name or "a forbidden weapon") .. ".")
+								sword_and_board_achievement.fail_function_executor.Fail(sword_and_board_achievement.name)
+								self:Cancel()
+							end
+						end)
+					end
 				end
-			end
-		elseif arg[1] == 17 then -- Offhand
-			if item_type == "Weapon" then
-				Hardcore:Print("Equipped " .. item_name .. ".")
-				sword_and_board_achievement.fail_function_executor.Fail(sword_and_board_achievement.name)
+			elseif arg[1] == 17 then -- Offhand
+				if item_type == "Weapon" then
+					Hardcore:Print("Equipped " .. (item_name or "a weapon in the offhand") .. ".")
+					sword_and_board_achievement.fail_function_executor.Fail(sword_and_board_achievement.name)
+				end
 			end
 		end
 	end

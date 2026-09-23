@@ -124,7 +124,10 @@ end
 
 
 local function suppressKey(self, key)
-   if unactive_element == nil then self:SetPropagateKeyboardInput(true) return end
+   if unactive_element == nil then 
+       pcall(self.SetPropagateKeyboardInput, self, true) 
+       return 
+   end
    if IsShiftKeyDown() then
      key = "s-"..key
    end
@@ -135,7 +138,7 @@ local function suppressKey(self, key)
      key = "a-"..key
    end
    if ach_keybinds[unactive_element][key] then 
-     self:SetPropagateKeyboardInput(false)
+     pcall(self.SetPropagateKeyboardInput, self, false)
       if not UIErrorsFrame:TryFlashingExistingMessage(LE_GAME_ERR_SYSTEM, "You cannot cast a "..unactive_element.." yet.") then
 	      UIErrorsFrame:AddMessage("You cannot cast a " ..unactive_element.. " spell yet.", 1.0, 0.0, 0, 1.0, LE_GAME_ERR_SYSTEM);
       end
@@ -143,14 +146,14 @@ local function suppressKey(self, key)
    end
 
    if ach_keybinds["arcane"][key] then 
-     self:SetPropagateKeyboardInput(false)
+     pcall(self.SetPropagateKeyboardInput, self, false)
       if not UIErrorsFrame:TryFlashingExistingMessage(LE_GAME_ERR_SYSTEM, "You cannot cast an arcane spell which deals damage.") then
 	      UIErrorsFrame:AddMessage("You cannot cast an arcane spell which deals damage.", 1.0, 0.0, 0, 1.0, LE_GAME_ERR_SYSTEM);
       end
      return
    end
 
-  self:SetPropagateKeyboardInput(true)
+  pcall(self.SetPropagateKeyboardInput, self, true)
 end
 local f2 = nil 
 -- Registers
@@ -249,6 +252,14 @@ end
 function _achievement:Unregister()
 	_achievement:UnregisterEvent("SPELLS_CHANGED")
 	_achievement:UnregisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+	_achievement:UnregisterEvent("UNIT_SPELLCAST_START")
+	_achievement:UnregisterEvent("UNIT_SPELLCAST_STOP")
+	_achievement:UnregisterEvent("PLAYER_REGEN_ENABLED")
+	_achievement:UnregisterEvent("PLAYER_REGEN_DISABLED")
+	_achievement:UnregisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+	if fire_and_frost_frame then
+		fire_and_frost_frame:Hide()
+	end
 end
 
 function _achievement:GatherSpellList()
@@ -278,50 +289,66 @@ function _achievement:GatherSpellList()
 		ach_action_slots[element]["ActionButton"..v-12] = 1
 	      end
 	    elseif v < 37 then
-		if _G["MultiBarRightButton"..v-24].HotKey:GetText() then ach_keybinds[element][_G["MultiBarRightButton"..v-24].HotKey:GetText()] = 1 end
+		if _G["MultiBarRightButton"..v-24].HotKey and _G["MultiBarRightButton"..v-24].HotKey:GetText() then ach_keybinds[element][_G["MultiBarRightButton"..v-24].HotKey:GetText()] = 1 end
 		ach_action_slots[element]["MultiBarRightButton"..v-24] = 1
 	    elseif v < 49 then
-		if _G["MultiBarLeftButton"..v-36].HotKey:GetText() then ach_keybinds[element][_G["MultiBarLeftButton"..v-36].HotKey:GetText()] = 1 end
+		if _G["MultiBarLeftButton"..v-36].HotKey and _G["MultiBarLeftButton"..v-36].HotKey:GetText() then ach_keybinds[element][_G["MultiBarLeftButton"..v-36].HotKey:GetText()] = 1 end
 		ach_action_slots[element]["MultiBarLeftButton"..v-36] = 1
 	    elseif v < 61 then
-		if _G["MultiBarBottomRightButton"..v-48].HotKey:GetText() then ach_keybinds[element][_G["MultiBarBottomRightButton"..v-48].HotKey:GetText()] = 1 end
+		if _G["MultiBarBottomRightButton"..v-48].HotKey and _G["MultiBarBottomRightButton"..v-48].HotKey:GetText() then ach_keybinds[element][_G["MultiBarBottomRightButton"..v-48].HotKey:GetText()] = 1 end
 		ach_action_slots[element]["MultiBarBottomRightButton"..v-48] = 1
 	    elseif v < 73 then
-		if _G["MultiBarBottomLeftButton"..v-60].HotKey:GetText() then ach_keybinds[element][_G["MultiBarBottomLeftButton"..v-60].HotKey:GetText()] = 1 end
+		if _G["MultiBarBottomLeftButton"..v-60].HotKey and _G["MultiBarBottomLeftButton"..v-60].HotKey:GetText() then ach_keybinds[element][_G["MultiBarBottomLeftButton"..v-60].HotKey:GetText()] = 1 end
 		ach_action_slots[element]["MultiBarBottomLeftButton"..v-60] = 1
 	    end
 	end
 
+	local numTabs = 4
+	if C_SpellBook and C_SpellBook.GetNumSpellBookSkillLines then
+		numTabs = C_SpellBook.GetNumSpellBookSkillLines()
+	end
 
-	for i = 1, 4 do
-		local name, texture, offset, numSlots, isGuild, offspecID = GetSpellTabInfo(i)
-		if name == "Fire" then 
-			for j = offset + 1, offset + numSlots do
-				local _,_,_,_,_,_,id = GetSpellInfo(j, "")
-				fire_spells[id] = 1
-				local action_slots = C_ActionBar.FindSpellActionButtons(id)
-				if action_slots then
-				  for _,v in ipairs(action_slots) do
-				    insertActionSlot(v, "fire")
-				  end
-				end
+	for i = 1, numTabs do
+		local name, offset, numSlots = nil, nil, nil
+		if C_SpellBook and C_SpellBook.GetSpellBookSkillLineInfo then
+			local info = C_SpellBook.GetSpellBookSkillLineInfo(i)
+			if info then
+				name = info.name
+				offset = info.itemIndexOffset
+				numSlots = info.numSpellBookItems
 			end
+		elseif GetSpellTabInfo then
+			local tName, _, tOffset, tSlots = GetSpellTabInfo(i)
+			name, offset, numSlots = tName, tOffset, tSlots
 		end
 
-		if name == "Frost" then 
+		if (name == "Fire" or name == "Frost") and offset and numSlots then
 			for j = offset + 1, offset + numSlots do
-				local _,_,_,_,_,_,id = GetSpellInfo(j, "")
-				frost_spells[id] = 1
-				local action_slots = C_ActionBar.FindSpellActionButtons(id)
-				if action_slots then
-				  for _,v in ipairs(action_slots) do
-				    insertActionSlot(v, "frost")
-				  end
+				local spell_id = nil
+				if C_SpellBook and C_SpellBook.GetSpellBookItemID then
+					spell_id = C_SpellBook.GetSpellBookItemID(j, Enum.SpellBookSpellBank.Player)
+				elseif GetSpellInfo then
+					local _,_,_,_,_,_,sID = GetSpellInfo(j, "")
+					spell_id = sID
+				end
+
+				if spell_id then
+					if name == "Fire" then
+						fire_spells[spell_id] = 1
+					elseif name == "Frost" then
+						frost_spells[spell_id] = 1
+					end
+					
+					local action_slots = C_ActionBar.FindSpellActionButtons(spell_id)
+					if action_slots then
+					  for _,v in ipairs(action_slots) do
+					    insertActionSlot(v, name == "Fire" and "fire" or "frost")
+					  end
+					end
 				end
 			end
 		end
 	end
-
 
 	-- Arcane missiles and arcane explosion
 	for id,_ in pairs(arcane_spells) do
@@ -344,7 +371,8 @@ _achievement:SetScript("OnEvent", function(self, event, ...)
 	if event == "SPELLS_CHANGED" then
 		_achievement:GatherSpellList()
 	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-	  local name, rank, icon, castTime, minRange, maxRange, spellID, originalIcon = GetSpellInfo(arg[3])
+	  local spellID = arg[3]
+	  if not spellID then return end
 	  switchElement(spellID)
 
 	  if combat_check_timer then combat_check_timer:Cancel() end
@@ -359,7 +387,10 @@ _achievement:SetScript("OnEvent", function(self, event, ...)
 	  end)
 	elseif event == "UNIT_SPELLCAST_START" then
 	  if arg[1] ~= "player" then return end
-	  local name, rank, icon, castTime, minRange, maxRange, spellID, originalIcon = GetSpellInfo(arg[3])
+	  local spellID = arg[3]
+	  if not spellID then return end
+	  
+	  local _, _, _, castTime = GetSpellInfo(spellID)
 	  if casting_timer then casting_timer:Cancel() end
 	  if castTime then
 	    casting_timer = C_Timer.NewTimer(max(.5, castTime/1000 - .5), function()
